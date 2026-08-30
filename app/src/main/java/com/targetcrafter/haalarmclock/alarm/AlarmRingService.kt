@@ -27,6 +27,9 @@ import kotlinx.coroutines.launch
 
 private const val MAX_RING_DURATION_MILLIS = 10 * 60 * 1000L
 private const val NOTIFICATION_ID = 42
+private const val FADE_IN_DURATION_MILLIS = 45_000L
+private const val FADE_IN_STEP_MILLIS = 500L
+private const val FADE_IN_START_VOLUME = 0.05f
 
 class AlarmRingService : LifecycleService() {
 
@@ -37,6 +40,7 @@ class AlarmRingService : LifecycleService() {
     // firing while the first is still ringing replaces it cleanly instead of leaking a MediaPlayer
     // or letting the first alarm's delayed auto-dismiss cut off the second alarm's ringing.
     private var ringJob: Job? = null
+    private var fadeJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
@@ -69,11 +73,15 @@ class AlarmRingService : LifecycleService() {
 
     private fun handleSnooze() {
         val alarm = currentAlarm ?: return
-        HaAlarmClockApp.from(this).scheduler.scheduleSnooze(
-            alarm.id,
-            System.currentTimeMillis() + alarm.snoozeMinutes * 60_000L,
-        )
-        stopRingingAndFinish()
+        val app = HaAlarmClockApp.from(this)
+        val snoozeUntil = System.currentTimeMillis() + alarm.snoozeMinutes * 60_000L
+        app.scheduler.scheduleSnooze(alarm.id, snoozeUntil)
+        // Persist the snooze mark before stopping the service (which cancels lifecycleScope) so the
+        // write isn't racing self-destruction.
+        lifecycleScope.launch {
+            app.repository.markSnoozed(alarm.id, snoozeUntil)
+            stopRingingAndFinish()
+        }
     }
 
     private fun handleDismiss() {
@@ -109,13 +117,33 @@ class AlarmRingService : LifecycleService() {
             try {
                 setDataSource(this@AlarmRingService, uri)
                 prepare()
+                if (alarm.fadeInEnabled) setVolume(FADE_IN_START_VOLUME, FADE_IN_START_VOLUME)
                 start()
             } catch (_: Exception) {
                 release()
                 mediaPlayer = null
             }
         }
+        if (alarm.fadeInEnabled && mediaPlayer != null) startFadeIn()
         if (alarm.vibrate) startVibration()
+    }
+
+    /** Ramps [mediaPlayer]'s volume from [FADE_IN_START_VOLUME] to full over [FADE_IN_DURATION_MILLIS]. */
+    private fun startFadeIn() {
+        fadeJob?.cancel()
+        fadeJob = lifecycleScope.launch {
+            val startedAt = System.currentTimeMillis()
+            while (true) {
+                val elapsed = System.currentTimeMillis() - startedAt
+                if (elapsed >= FADE_IN_DURATION_MILLIS) {
+                    mediaPlayer?.setVolume(1f, 1f)
+                    break
+                }
+                val volume = FADE_IN_START_VOLUME + (1f - FADE_IN_START_VOLUME) * (elapsed.toFloat() / FADE_IN_DURATION_MILLIS)
+                mediaPlayer?.setVolume(volume, volume)
+                delay(FADE_IN_STEP_MILLIS)
+            }
+        }
     }
 
     private fun startVibration() {
@@ -133,6 +161,8 @@ class AlarmRingService : LifecycleService() {
     }
 
     private fun stopRinging() {
+        fadeJob?.cancel()
+        fadeJob = null
         mediaPlayer?.apply {
             if (isPlaying) stop()
             release()

@@ -23,6 +23,9 @@ class AlarmReceiver : BroadcastReceiver() {
                 val alarm = app.repository.getById(alarmId) ?: return@launch
                 if (!isSnooze && !alarm.enabled) return@launch
 
+                app.repository.clearSnoozed(alarmId)
+                app.scheduler.cancelUpcomingNotification(alarmId)
+
                 ContextCompat.startForegroundService(
                     context,
                     Intent(context, AlarmRingService::class.java)

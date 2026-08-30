@@ -31,6 +31,7 @@ object HaSyncPayload {
                     put("enabled", alarm.enabled)
                     put("repeat", daysMaskLabel(alarm.repeatDaysMask))
                     if (alarm.enabled) put("next_trigger", isoInstant(alarm.nextTriggerAtMillis()))
+                    alarm.snoozedUntilMillis?.let { put("snoozed_until", isoInstant(it)) }
                 }
             }
         }

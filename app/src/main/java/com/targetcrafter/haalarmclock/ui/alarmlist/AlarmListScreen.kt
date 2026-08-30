@@ -1,5 +1,6 @@
 package com.targetcrafter.haalarmclock.ui.alarmlist
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,28 +26,38 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
+import com.targetcrafter.haalarmclock.R
 import com.targetcrafter.haalarmclock.data.Alarm
 import com.targetcrafter.haalarmclock.data.daysMaskLabel
 import com.targetcrafter.haalarmclock.ui.appViewModelFactory
+import com.targetcrafter.haalarmclock.ui.editor.AlarmEditSheet
+import com.targetcrafter.haalarmclock.ui.editor.QuickTimeDialog
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AlarmListScreen(
-    onAddAlarm: () -> Unit,
-    onEditAlarm: (Long) -> Unit,
-    onOpenSettings: () -> Unit,
-) {
+fun AlarmListScreen(onOpenSettings: () -> Unit) {
     val app = HaAlarmClockApp.from(LocalContext.current)
     val viewModel: AlarmListViewModel = viewModel(
         factory = appViewModelFactory { AlarmListViewModel(app.repository) },
     )
     val alarms by viewModel.alarms.collectAsState()
+
+    var quickTimeAlarm by remember { mutableStateOf<Alarm?>(null) }
+    var editSheetAlarmId by remember { mutableStateOf<Long?>(null) }
+    var showNewAlarmSheet by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -60,7 +71,7 @@ fun AlarmListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddAlarm) {
+            FloatingActionButton(onClick = { showNewAlarmSheet = true }) {
                 Icon(Icons.Filled.Add, contentDescription = "Add alarm")
             }
         },
@@ -79,22 +90,37 @@ fun AlarmListScreen(
                     AlarmRow(
                         alarm = alarm,
                         onToggle = { enabled -> viewModel.setEnabled(alarm, enabled) },
-                        onClick = { onEditAlarm(alarm.id) },
+                        onTimeClick = { quickTimeAlarm = alarm },
+                        onDetailsClick = { editSheetAlarmId = alarm.id },
                     )
                 }
             }
         }
     }
+
+    quickTimeAlarm?.let { alarm ->
+        QuickTimeDialog(
+            initialHour = alarm.hour,
+            initialMinute = alarm.minute,
+            onDismiss = { quickTimeAlarm = null },
+            onConfirm = { hour, minute ->
+                viewModel.updateTime(alarm, hour, minute)
+                quickTimeAlarm = null
+            },
+        )
+    }
+
+    if (editSheetAlarmId != null) {
+        AlarmEditSheet(alarmId = editSheetAlarmId, onDismiss = { editSheetAlarmId = null })
+    }
+    if (showNewAlarmSheet) {
+        AlarmEditSheet(alarmId = null, onDismiss = { showNewAlarmSheet = false })
+    }
 }
 
 @Composable
-private fun AlarmRow(alarm: Alarm, onToggle: (Boolean) -> Unit, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        onClick = onClick,
-    ) {
+private fun AlarmRow(alarm: Alarm, onToggle: (Boolean) -> Unit, onTimeClick: () -> Unit, onDetailsClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -102,23 +128,36 @@ private fun AlarmRow(alarm: Alarm, onToggle: (Boolean) -> Unit, onClick: () -> U
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AlarmInfo(alarm)
+            AlarmInfo(alarm, onTimeClick, onDetailsClick)
             Switch(checked = alarm.enabled, onCheckedChange = onToggle)
         }
     }
 }
 
 @Composable
-private fun RowScope.AlarmInfo(alarm: Alarm) {
-    Column {
+private fun RowScope.AlarmInfo(alarm: Alarm, onTimeClick: () -> Unit, onDetailsClick: () -> Unit) {
+    Column(modifier = Modifier.weight(1f)) {
         Text(
             text = String.format("%02d:%02d", alarm.hour, alarm.minute),
             style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.clickable(onClick = onTimeClick),
         )
-        val subtitle = listOfNotNull(
-            alarm.label.ifBlank { null },
-            daysMaskLabel(alarm.repeatDaysMask),
-        ).joinToString(" • ")
-        Text(text = subtitle, style = MaterialTheme.typography.bodyMedium)
+        Column(modifier = Modifier.clickable(onClick = onDetailsClick)) {
+            val subtitle = listOfNotNull(
+                alarm.label.ifBlank { null },
+                daysMaskLabel(alarm.repeatDaysMask),
+            ).joinToString(" • ")
+            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium)
+            alarm.snoozedUntilMillis?.let { untilMillis ->
+                Text(
+                    text = stringResource(R.string.snoozed_until, formatTime(untilMillis)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
     }
 }
+
+private fun formatTime(epochMillis: Long): String =
+    DateTimeFormatter.ofPattern("HH:mm").format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))

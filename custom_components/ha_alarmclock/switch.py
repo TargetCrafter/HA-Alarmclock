@@ -93,7 +93,12 @@ class AlarmSwitch(SwitchEntity):
         alarm = self._alarm()
         if alarm is None:
             return {}
-        return {"time": alarm.time, "repeat": alarm.repeat, "next_trigger": alarm.next_trigger}
+        return {
+            "time": alarm.time,
+            "repeat": alarm.repeat,
+            "next_trigger": alarm.next_trigger,
+            "snoozed_until": alarm.snoozed_until,
+        }
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._set_enabled(True)

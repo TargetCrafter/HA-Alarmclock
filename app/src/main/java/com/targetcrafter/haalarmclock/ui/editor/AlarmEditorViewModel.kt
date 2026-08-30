@@ -16,8 +16,10 @@ data class AlarmEditorUiState(
     val hour: Int = 8,
     val minute: Int = 0,
     val label: String = "",
+    val enabled: Boolean = true,
     val repeatDaysMask: Int = 0,
     val vibrate: Boolean = true,
+    val fadeInEnabled: Boolean = true,
     val ringtoneUri: String? = null,
     val snoozeMinutes: Int = 10,
     val isLoading: Boolean = true,
@@ -43,8 +45,10 @@ class AlarmEditorViewModel(
                         hour = alarm.hour,
                         minute = alarm.minute,
                         label = alarm.label,
+                        enabled = alarm.enabled,
                         repeatDaysMask = alarm.repeatDaysMask,
                         vibrate = alarm.vibrate,
+                        fadeInEnabled = alarm.fadeInEnabled,
                         ringtoneUri = alarm.ringtoneUri,
                         snoozeMinutes = alarm.snoozeMinutes,
                         isLoading = false,
@@ -70,6 +74,8 @@ class AlarmEditorViewModel(
 
     fun updateVibrate(vibrate: Boolean) = _state.update { it.copy(vibrate = vibrate) }
 
+    fun updateFadeIn(fadeInEnabled: Boolean) = _state.update { it.copy(fadeInEnabled = fadeInEnabled) }
+
     fun updateRingtone(uri: String?) = _state.update { it.copy(ringtoneUri = uri) }
 
     fun updateSnoozeMinutes(minutes: Int) = _state.update { it.copy(snoozeMinutes = minutes.coerceIn(1, 60)) }
@@ -83,9 +89,10 @@ class AlarmEditorViewModel(
                     hour = s.hour,
                     minute = s.minute,
                     label = s.label,
-                    enabled = true,
+                    enabled = s.enabled,
                     repeatDaysMask = s.repeatDaysMask,
                     vibrate = s.vibrate,
+                    fadeInEnabled = s.fadeInEnabled,
                     ringtoneUri = s.ringtoneUri,
                     snoozeMinutes = s.snoozeMinutes,
                 ),

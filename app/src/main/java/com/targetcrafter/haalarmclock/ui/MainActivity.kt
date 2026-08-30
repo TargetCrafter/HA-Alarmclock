@@ -8,20 +8,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.targetcrafter.haalarmclock.ha.HaSyncService
 import com.targetcrafter.haalarmclock.ui.alarmlist.AlarmListScreen
-import com.targetcrafter.haalarmclock.ui.editor.AlarmEditorScreen
 import com.targetcrafter.haalarmclock.ui.settings.SettingsScreen
 import com.targetcrafter.haalarmclock.ui.theme.HaAlarmClockTheme
 
 private const val ROUTE_LIST = "list"
 private const val ROUTE_SETTINGS = "settings"
-private const val ROUTE_EDITOR = "editor/{alarmId}"
-private const val ARG_NEW_ALARM_ID = -1L
+private const val FADE_MILLIS = 220
 
 class MainActivity : ComponentActivity() {
 
@@ -37,20 +38,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             HaAlarmClockTheme {
                 val navController = rememberNavController()
-                NavHost(navController = navController, startDestination = ROUTE_LIST) {
+                // Alarm editing now happens in-place on the list screen (quick time popup,
+                // full-options sheet); only List <-> Settings is a real navigation. A plain fade
+                // instead of the default instant swap avoids the "flash" of a hard cut.
+                NavHost(
+                    navController = navController,
+                    startDestination = ROUTE_LIST,
+                    enterTransition = { fadeIn(animationSpec = tween(FADE_MILLIS)) },
+                    exitTransition = { fadeOut(animationSpec = tween(FADE_MILLIS)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(FADE_MILLIS)) },
+                    popExitTransition = { fadeOut(animationSpec = tween(FADE_MILLIS)) },
+                ) {
                     composable(ROUTE_LIST) {
-                        AlarmListScreen(
-                            onAddAlarm = { navController.navigate("editor/$ARG_NEW_ALARM_ID") },
-                            onEditAlarm = { id -> navController.navigate("editor/$id") },
-                            onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
-                        )
-                    }
-                    composable(ROUTE_EDITOR) { backStackEntry ->
-                        val alarmId = backStackEntry.arguments?.getString("alarmId")?.toLongOrNull() ?: ARG_NEW_ALARM_ID
-                        AlarmEditorScreen(
-                            alarmId = if (alarmId == ARG_NEW_ALARM_ID) null else alarmId,
-                            onDone = { navController.popBackStack() },
-                        )
+                        AlarmListScreen(onOpenSettings = { navController.navigate(ROUTE_SETTINGS) })
                     }
                     composable(ROUTE_SETTINGS) {
                         SettingsScreen(onBack = { navController.popBackStack() })

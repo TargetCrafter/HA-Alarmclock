@@ -23,6 +23,9 @@ data class Alarm(
     val vibrate: Boolean = true,
     val ringtoneUri: String? = null,
     val snoozeMinutes: Int = 10,
+    val fadeInEnabled: Boolean = true,
+    /** Set while this alarm is snoozed; cleared when the snooze fires, or the alarm is dismissed/edited/deleted. */
+    val snoozedUntilMillis: Long? = null,
 ) {
     val repeatDays: Set<DayOfWeek>
         get() = DayOfWeek.values().filter { repeatDaysMask and (1 shl (it.value - 1)) != 0 }.toSet()

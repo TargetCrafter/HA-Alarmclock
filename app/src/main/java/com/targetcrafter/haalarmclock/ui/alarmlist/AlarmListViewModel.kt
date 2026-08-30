@@ -24,4 +24,8 @@ class AlarmListViewModel(private val repository: AlarmRepository) : ViewModel() 
     fun delete(alarm: Alarm) {
         viewModelScope.launch { repository.delete(alarm) }
     }
+
+    fun updateTime(alarm: Alarm, hour: Int, minute: Int) {
+        viewModelScope.launch { repository.updateTime(alarm.id, hour, minute) }
+    }
 }

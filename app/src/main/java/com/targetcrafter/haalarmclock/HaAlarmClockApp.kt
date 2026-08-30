@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit
 
 const val NOTIFICATION_CHANNEL_ALARM = "alarm_ringing"
 const val NOTIFICATION_CHANNEL_SYNC = "ha_sync"
+const val NOTIFICATION_CHANNEL_UPCOMING = "upcoming_alarm"
 
 class HaAlarmClockApp : Application() {
 
@@ -61,6 +62,13 @@ class HaAlarmClockApp : Application() {
                 NOTIFICATION_CHANNEL_SYNC,
                 getString(R.string.notification_channel_ha_sync),
                 NotificationManager.IMPORTANCE_MIN,
+            ),
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                NOTIFICATION_CHANNEL_UPCOMING,
+                getString(R.string.notification_channel_upcoming_alarm),
+                NotificationManager.IMPORTANCE_DEFAULT,
             ),
         )
     }

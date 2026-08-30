@@ -27,6 +27,25 @@ lights when an alarm rings, or let HA snooze/dismiss it).
     `Snooze`/`Dismiss` button entities it creates. The connection reconnects with
     backoff if it drops.
 
+## UI/UX notes
+
+- **Editing is in-place, not a separate screen.** Tap an alarm's time for a quick
+  time-only popup; tap its label/repeat area for the full options sheet (label, repeat
+  days, vibrate, fade-in, ringtone, snooze duration), which opens as a tall bottom
+  sheet with an always-visible floating Save button rather than a scrolling screen.
+- **Fade-in is on by default.** Alarms ramp from near-silent to full volume over the
+  first 45 seconds; toggle it per-alarm in the options sheet.
+- **A snoozed alarm shows a "Snoozed until HH:MM" badge** on its row until it rings
+  again or is otherwise cleared.
+- **10 minutes before an alarm**, a heads-up notification appears with a live
+  countdown and a "Skip" action, so you can cancel that occurrence if you're already
+  awake (repeating alarms just skip that one occurrence; one-off alarms get disabled).
+- Uses Material 3 Expressive (`MaterialExpressiveTheme` + `MotionScheme.expressive()`),
+  which needs a Compose BOM recent enough to include Material3 1.4+. If
+  `gradle/libs.versions.toml`'s `composeBom = "2025.09.00"` doesn't resolve, bump it to
+  whatever Android Studio's quick-fix suggests — Material3 Expressive is the one area
+  of this pass I couldn't verify against a real dependency resolution.
+
 ## Project layout
 
 ```

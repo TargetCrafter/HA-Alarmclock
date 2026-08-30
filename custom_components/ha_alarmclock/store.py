@@ -18,6 +18,7 @@ class AlarmInfo:
     enabled: bool
     repeat: str
     next_trigger: str | None = None
+    snoozed_until: str | None = None
 
 
 @dataclass
@@ -68,6 +69,7 @@ class AlarmClockStore:
                 enabled=bool(alarm.get("enabled", False)),
                 repeat=str(alarm.get("repeat") or ""),
                 next_trigger=alarm.get("next_trigger"),
+                snoozed_until=alarm.get("snoozed_until"),
             )
             for alarm in payload.get("alarms", [])
             if "id" in alarm
