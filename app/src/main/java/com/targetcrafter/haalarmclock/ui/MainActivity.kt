@@ -1,7 +1,6 @@
 package com.targetcrafter.haalarmclock.ui
 
 import android.Manifest
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -14,7 +13,7 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.targetcrafter.haalarmclock.ha.HaSyncService
+import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.alarmlist.AlarmListScreen
 import com.targetcrafter.haalarmclock.ui.settings.SettingsScreen
 import com.targetcrafter.haalarmclock.ui.theme.HaAlarmClockTheme
@@ -31,7 +30,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
-        startHaSyncService()
+        startHaSyncServiceIfConfigured(this)
 
         setContent {
             HaAlarmClockTheme {
@@ -66,9 +65,5 @@ class MainActivity : ComponentActivity() {
         ) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-    }
-
-    private fun startHaSyncService() {
-        ContextCompat.startForegroundService(this, Intent(this, HaSyncService::class.java))
     }
 }

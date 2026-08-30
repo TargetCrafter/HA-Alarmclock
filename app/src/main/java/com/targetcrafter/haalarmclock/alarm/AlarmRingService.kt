@@ -59,12 +59,15 @@ class AlarmRingService : LifecycleService() {
             val alarm = HaAlarmClockApp.from(this@AlarmRingService).repository.getById(alarmId) ?: return@launch
             currentAlarm = alarm
             RingingState.setRinging(alarm)
+            // Relies solely on the notification's fullScreenIntent (below) to bring up
+            // RingingActivity, rather than also calling startActivity() directly here: since
+            // Android 10, a plain startActivity() from a background Service is subject to
+            // background-activity-launch restrictions and isn't reliably honored (this was
+            // likely why the ringing UI wasn't appearing over the lock screen). fullScreenIntent
+            // is the OS-sanctioned mechanism for exactly this — alarms and incoming calls — and
+            // needs USE_FULL_SCREEN_INTENT declared in the manifest to work on API 34+.
             startForeground(NOTIFICATION_ID, buildNotification(alarm))
             startRinging(alarm)
-            startActivity(
-                Intent(this@AlarmRingService, RingingActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
             delay(MAX_RING_DURATION_MILLIS)
             handleDismiss()
         }

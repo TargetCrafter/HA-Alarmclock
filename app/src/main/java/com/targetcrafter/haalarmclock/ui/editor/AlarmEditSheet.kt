@@ -10,13 +10,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -28,9 +28,11 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFloatingActionButton
@@ -49,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -85,7 +88,7 @@ fun AlarmEditSheet(alarmId: Long?, onDismiss: () -> Unit) {
 
         var soundExpanded by remember { mutableStateOf(false) }
         var snoozeExpanded by remember { mutableStateOf(false) }
-        var fadeInExpanded by remember { mutableStateOf(false) }
+        var fadeInDurationExpanded by remember { mutableStateOf(false) }
 
         val ringtonePickerLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
@@ -144,106 +147,142 @@ fun AlarmEditSheet(alarmId: Long?, onDismiss: () -> Unit) {
                 )
 
                 Text("Repeat", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     ALL_DAYS.forEach { day ->
                         val selected = state.repeatDaysMask and (1 shl (day.value - 1)) != 0
                         FilterChip(
                             selected = selected,
                             onClick = { viewModel.toggleDay(day) },
-                            label = { Text(day.name.take(1), style = MaterialTheme.typography.titleSmall) },
-                            modifier = Modifier.size(48.dp),
+                            label = {
+                                Text(
+                                    day.name.take(1),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
 
-                ListItem(
-                    headlineContent = { Text("Vibrate", style = MaterialTheme.typography.bodyLarge) },
-                    trailingContent = {
-                        Switch(
-                            checked = state.vibrate,
-                            onCheckedChange = viewModel::updateVibrate,
-                            modifier = Modifier.scale(1.15f),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                ListItem(
-                    headlineContent = { Text("Fade in gently", style = MaterialTheme.typography.bodyLarge) },
-                    supportingContent = { Text("Ramps up to full volume") },
-                    trailingContent = {
-                        Switch(
-                            checked = state.fadeInEnabled,
-                            onCheckedChange = viewModel::updateFadeIn,
-                            modifier = Modifier.scale(1.15f),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                SectionCard {
+                    ListItem(
+                        headlineContent = { Text("Vibrate", style = MaterialTheme.typography.bodyLarge) },
+                        trailingContent = {
+                            Switch(
+                                checked = state.vibrate,
+                                onCheckedChange = viewModel::updateVibrate,
+                                modifier = Modifier.scale(1.15f),
+                            )
+                        },
+                    )
+                }
 
-                ExpandableOptionRow(
-                    title = "Sound",
-                    summary = if (state.ringtoneUri != null) "Custom" else "Default alarm sound",
-                    expanded = soundExpanded,
-                    onToggle = { soundExpanded = !soundExpanded },
-                ) {
-                    Button(
-                        onClick = {
-                            val intent = android.content.Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
-                                putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
-                                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
-                                putExtra(
-                                    RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI,
-                                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
-                                )
-                                state.ringtoneUri?.let { putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(it)) }
+                SectionCard {
+                    ListItem(
+                        headlineContent = { Text("Fade in gently", style = MaterialTheme.typography.bodyLarge) },
+                        supportingContent = { Text("Ramps up to full volume") },
+                        trailingContent = {
+                            Switch(
+                                checked = state.fadeInEnabled,
+                                onCheckedChange = viewModel::updateFadeIn,
+                                modifier = Modifier.scale(1.15f),
+                            )
+                        },
+                    )
+                    AnimatedVisibility(visible = state.fadeInEnabled) {
+                        Column {
+                            HorizontalDivider()
+                            ListItem(
+                                headlineContent = { Text("Duration") },
+                                supportingContent = {
+                                    Text(
+                                        if (state.fadeInSecondsOverride == null) {
+                                            "${state.effectiveFadeInSeconds}s (default)"
+                                        } else {
+                                            "${state.effectiveFadeInSeconds}s (custom)"
+                                        },
+                                    )
+                                },
+                                trailingContent = {
+                                    Icon(
+                                        if (fadeInDurationExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                        contentDescription = if (fadeInDurationExpanded) "Collapse" else "Expand",
+                                        modifier = Modifier.size(28.dp),
+                                    )
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { fadeInDurationExpanded = !fadeInDurationExpanded },
+                            )
+                            AnimatedVisibility(visible = fadeInDurationExpanded) {
+                                Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
+                                    DurationOverrideEditor(
+                                        usesDefault = state.fadeInSecondsOverride == null,
+                                        value = state.effectiveFadeInSeconds,
+                                        unit = "s",
+                                        step = 5,
+                                        onUseDefaultChanged = { useDefault ->
+                                            viewModel.setFadeInSecondsOverride(if (useDefault) null else state.effectiveFadeInSeconds)
+                                        },
+                                        onValueChange = { viewModel.setFadeInSecondsOverride(it) },
+                                    )
+                                }
                             }
-                            ringtonePickerLauncher.launch(intent)
-                        },
-                        contentPadding = ButtonDefaults.ContentPadding,
-                    ) { Text("Choose ringtone", style = MaterialTheme.typography.bodyLarge) }
+                        }
+                    }
                 }
 
-                ExpandableOptionRow(
-                    title = "Snooze duration",
-                    summary = if (state.snoozeMinutesOverride == null) {
-                        "${state.effectiveSnoozeMinutes} min (default)"
-                    } else {
-                        "${state.effectiveSnoozeMinutes} min (custom)"
-                    },
-                    expanded = snoozeExpanded,
-                    onToggle = { snoozeExpanded = !snoozeExpanded },
-                ) {
-                    DurationOverrideEditor(
-                        usesDefault = state.snoozeMinutesOverride == null,
-                        value = state.effectiveSnoozeMinutes,
-                        unit = "min",
-                        onUseDefaultChanged = { useDefault ->
-                            viewModel.setSnoozeMinutesOverride(if (useDefault) null else state.effectiveSnoozeMinutes)
-                        },
-                        onValueChange = { viewModel.setSnoozeMinutesOverride(it) },
-                    )
+                SectionCard {
+                    ExpandableOptionRow(
+                        title = "Sound",
+                        summary = if (state.ringtoneUri != null) "Custom" else "Default alarm sound",
+                        expanded = soundExpanded,
+                        onToggle = { soundExpanded = !soundExpanded },
+                    ) {
+                        Button(
+                            onClick = {
+                                val intent = android.content.Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                    putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                    putExtra(
+                                        RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI,
+                                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                                    )
+                                    state.ringtoneUri?.let { putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(it)) }
+                                }
+                                ringtonePickerLauncher.launch(intent)
+                            },
+                            contentPadding = ButtonDefaults.ContentPadding,
+                        ) { Text("Choose ringtone", style = MaterialTheme.typography.bodyLarge) }
+                    }
                 }
 
-                ExpandableOptionRow(
-                    title = "Fade-in duration",
-                    summary = if (state.fadeInSecondsOverride == null) {
-                        "${state.effectiveFadeInSeconds}s (default)"
-                    } else {
-                        "${state.effectiveFadeInSeconds}s (custom)"
-                    },
-                    expanded = fadeInExpanded,
-                    onToggle = { fadeInExpanded = !fadeInExpanded },
-                ) {
-                    DurationOverrideEditor(
-                        usesDefault = state.fadeInSecondsOverride == null,
-                        value = state.effectiveFadeInSeconds,
-                        unit = "s",
-                        step = 5,
-                        onUseDefaultChanged = { useDefault ->
-                            viewModel.setFadeInSecondsOverride(if (useDefault) null else state.effectiveFadeInSeconds)
+                SectionCard {
+                    ExpandableOptionRow(
+                        title = "Snooze duration",
+                        summary = if (state.snoozeMinutesOverride == null) {
+                            "${state.effectiveSnoozeMinutes} min (default)"
+                        } else {
+                            "${state.effectiveSnoozeMinutes} min (custom)"
                         },
-                        onValueChange = { viewModel.setFadeInSecondsOverride(it) },
-                    )
+                        expanded = snoozeExpanded,
+                        onToggle = { snoozeExpanded = !snoozeExpanded },
+                    ) {
+                        DurationOverrideEditor(
+                            usesDefault = state.snoozeMinutesOverride == null,
+                            value = state.effectiveSnoozeMinutes,
+                            unit = "min",
+                            onUseDefaultChanged = { useDefault ->
+                                viewModel.setSnoozeMinutesOverride(if (useDefault) null else state.effectiveSnoozeMinutes)
+                            },
+                            onValueChange = { viewModel.setSnoozeMinutesOverride(it) },
+                        )
+                    }
                 }
             }
 
@@ -256,6 +295,14 @@ fun AlarmEditSheet(alarmId: Long?, onDismiss: () -> Unit) {
                 Icon(Icons.Filled.Check, contentDescription = "Save", modifier = Modifier.size(32.dp))
             }
         }
+    }
+}
+
+/** A rounded-corner card used for every option group, so the sheet reads as a consistent list of cards. */
+@Composable
+private fun SectionCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(content = content)
     }
 }
 
@@ -315,7 +362,7 @@ private fun ExpandableOptionRow(
             modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
         )
         AnimatedVisibility(visible = expanded) {
-            Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 8.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
                 content()
             }
         }

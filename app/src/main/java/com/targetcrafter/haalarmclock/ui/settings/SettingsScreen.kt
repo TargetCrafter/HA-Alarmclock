@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
+import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.data.AppDefaults
 import com.targetcrafter.haalarmclock.ha.HaConnectionState
 import com.targetcrafter.haalarmclock.ha.HaSettings
@@ -167,6 +168,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                             fadeInSeconds = defaultFadeInSeconds,
                         ),
                     )
+                    // The sync service only ever gets started when sync is configured (so its
+                    // notification doesn't show otherwise); if the user just turned it on, start
+                    // it now instead of waiting for the next app launch. A no-op if already running.
+                    startHaSyncServiceIfConfigured(context)
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save") }

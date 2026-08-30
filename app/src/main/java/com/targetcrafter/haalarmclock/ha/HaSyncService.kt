@@ -2,7 +2,10 @@ package com.targetcrafter.haalarmclock.ha
 
 import android.app.Notification
 import android.app.NotificationManager
+import android.content.Context
+import android.content.Intent
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
@@ -13,18 +16,31 @@ import com.targetcrafter.haalarmclock.alarm.RingingState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 private const val NOTIFICATION_ID = 1
 private const val INITIAL_BACKOFF_MILLIS = 2_000L
 private const val MAX_BACKOFF_MILLIS = 60_000L
 
+/** Starts [HaSyncService] only if HA sync is actually enabled/configured — see the class doc for why. */
+fun startHaSyncServiceIfConfigured(context: Context) {
+    if (HaAlarmClockApp.from(context).haSettingsStore.settings.value.isConfigured) {
+        ContextCompat.startForegroundService(context, Intent(context, HaSyncService::class.java))
+    }
+}
+
 /**
  * Long-running foreground service that keeps a direct connection to Home Assistant's custom
  * "HA Alarm Clock" integration alive, independent of whether the app UI is open:
  *  - pushes alarm/ringing state via REST whenever it changes
  *  - maintains a WebSocket connection (with backoff reconnect) to receive commands HA sends back
- * Started on app launch and on boot; the connection is simply not opened if HA sync is disabled.
+ *
+ * Only ever started (by MainActivity, BootReceiver, or the Settings screen) when HA sync is
+ * enabled — a foreground service notification is otherwise required to exist for as long as the
+ * service runs, and there's no reason to show one when there's no sync to report on. If sync is
+ * disabled while this is running, it stops itself (removing the notification).
  */
 class HaSyncService : LifecycleService() {
 
@@ -32,6 +48,12 @@ class HaSyncService : LifecycleService() {
         super.onCreate()
         val app = HaAlarmClockApp.from(this)
         startForeground(NOTIFICATION_ID, buildNotification(connected = false))
+
+        lifecycleScope.launch {
+            app.haSettingsStore.settings.map { it.isConfigured }.distinctUntilChanged().collect { configured ->
+                if (!configured) stopSelf()
+            }
+        }
 
         // Push current state to HA whenever settings, alarms, or ringing state change.
         lifecycleScope.launch {
@@ -86,6 +108,14 @@ class HaSyncService : LifecycleService() {
                 updateNotification(state == HaConnectionState.CONNECTED)
             }
         }
+    }
+
+    override fun onDestroy() {
+        // Otherwise the WebSocket would linger open to HA (nothing is listening on it anymore)
+        // until OkHttp's own idle timeout or process death — e.g. every time the user disables
+        // HA sync, since that now stops this service via the settings-watching coroutine above.
+        HaAlarmClockApp.from(this).haWebSocketClient.close()
+        super.onDestroy()
     }
 
     private fun updateNotification(connected: Boolean) {

@@ -3,9 +3,8 @@ package com.targetcrafter.haalarmclock.alarm
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
-import com.targetcrafter.haalarmclock.ha.HaSyncService
+import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,6 +24,6 @@ class BootReceiver : BroadcastReceiver() {
                 pendingResult.finish()
             }
         }
-        ContextCompat.startForegroundService(context, Intent(context, HaSyncService::class.java))
+        startHaSyncServiceIfConfigured(context)
     }
 }
