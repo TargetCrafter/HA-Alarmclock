@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * App-wide holder for "which alarm is currently ringing", if any. Lets the ringing
- * notification/activity, the MQTT sync layer, and MQTT-originated snooze/dismiss commands all
+ * notification/activity, the HA sync layer, and HA-originated snooze/dismiss commands all
  * observe and act on the same state without binding to each other directly.
  */
 object RingingState {

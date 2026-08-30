@@ -1,5 +1,7 @@
 package com.targetcrafter.haalarmclock.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +18,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -31,46 +34,38 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
-import com.targetcrafter.haalarmclock.mqtt.MqttConnectionState
-import com.targetcrafter.haalarmclock.mqtt.MqttSettings
+import com.targetcrafter.haalarmclock.ha.HaConnectionState
+import com.targetcrafter.haalarmclock.ha.HaSettings
 import com.targetcrafter.haalarmclock.ui.appViewModelFactory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
-    val app = HaAlarmClockApp.from(LocalContext.current)
+    val context = LocalContext.current
+    val app = HaAlarmClockApp.from(context)
     val viewModel: SettingsViewModel = viewModel(
-        factory = appViewModelFactory { SettingsViewModel(app.mqttSettingsStore, app.mqttManager) },
+        factory = appViewModelFactory { SettingsViewModel(app.haSettingsStore, app.haWebSocketClient) },
     )
     val persisted by viewModel.settings.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
 
     var enabled by remember { mutableStateOf(persisted.enabled) }
-    var host by remember { mutableStateOf(persisted.host) }
-    var port by remember { mutableStateOf(persisted.port.toString()) }
-    var useTls by remember { mutableStateOf(persisted.useTls) }
-    var username by remember { mutableStateOf(persisted.username) }
-    var password by remember { mutableStateOf(persisted.password) }
-    var baseTopic by remember { mutableStateOf(persisted.baseTopic) }
+    var baseUrl by remember { mutableStateOf(persisted.baseUrl) }
+    var accessToken by remember { mutableStateOf(persisted.accessToken) }
 
     LaunchedEffect(Unit) {
         enabled = persisted.enabled
-        host = persisted.host
-        port = persisted.port.toString()
-        useTls = persisted.useTls
-        username = persisted.username
-        password = persisted.password
-        baseTopic = persisted.baseTopic
+        baseUrl = persisted.baseUrl
+        accessToken = persisted.accessToken
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Home Assistant / MQTT") },
+                title = { Text("Home Assistant") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
@@ -88,62 +83,48 @@ fun SettingsScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ListItem(
-                headlineContent = { Text("Sync to Home Assistant via MQTT") },
+                headlineContent = { Text("Sync with Home Assistant") },
                 supportingContent = { Text(connectionStatusLabel(connectionState)) },
                 trailingContent = { Switch(checked = enabled, onCheckedChange = { enabled = it }) },
             )
             HorizontalDivider()
 
+            Text(
+                "Requires the \"HA Alarm Clock\" custom integration installed in Home Assistant, " +
+                    "and a Long-Lived Access Token from your HA user profile (Security tab).",
+            )
+
             OutlinedTextField(
-                value = host,
-                onValueChange = { host = it },
-                label = { Text("Broker host") },
-                placeholder = { Text("homeassistant.local") },
+                value = baseUrl,
+                onValueChange = { baseUrl = it },
+                label = { Text("Home Assistant URL") },
+                placeholder = { Text("https://homeassistant.local:8123") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
-                value = port,
-                onValueChange = { new -> if (new.all(Char::isDigit)) port = new },
-                label = { Text("Port") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                value = accessToken,
+                onValueChange = { accessToken = it },
+                label = { Text("Long-Lived Access Token") },
+                supportingText = { Text("Generate one in Home Assistant under your profile's Security tab.") },
                 modifier = Modifier.fillMaxWidth(),
             )
-            ListItem(
-                headlineContent = { Text("Use TLS") },
-                trailingContent = { Switch(checked = useTls, onCheckedChange = { useTls = it }) },
-            )
-            OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
-                label = { Text("Username (optional)") },
+            OutlinedButton(
+                onClick = {
+                    val target = baseUrl.trim().trimEnd('/').ifBlank { return@OutlinedButton }
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("$target/profile/security")))
+                },
+                enabled = baseUrl.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password (optional)") },
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = baseTopic,
-                onValueChange = { baseTopic = it },
-                label = { Text("Base topic") },
-                supportingText = { Text("Entities publish under this topic; change only if it collides with another device.") },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            ) { Text("Open Home Assistant profile") }
 
             Button(
                 onClick = {
                     viewModel.save(
-                        MqttSettings(
+                        HaSettings(
                             enabled = enabled,
-                            host = host.trim(),
-                            port = port.toIntOrNull() ?: 1883,
-                            useTls = useTls,
-                            username = username,
-                            password = password,
-                            baseTopic = baseTopic.trim().ifBlank { "haalarmclock" },
+                            baseUrl = baseUrl.trim(),
+                            accessToken = accessToken.trim(),
                         ),
                     )
                 },
@@ -153,10 +134,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 }
 
-private fun connectionStatusLabel(state: MqttConnectionState): String = when (state) {
-    MqttConnectionState.DISABLED -> "Not enabled"
-    MqttConnectionState.DISCONNECTED -> "Disconnected"
-    MqttConnectionState.CONNECTING -> "Connecting…"
-    MqttConnectionState.CONNECTED -> "Connected"
-    MqttConnectionState.ERROR -> "Connection error — check host/credentials"
+private fun connectionStatusLabel(state: HaConnectionState): String = when (state) {
+    HaConnectionState.DISCONNECTED -> "Not connected"
+    HaConnectionState.CONNECTING -> "Connecting…"
+    HaConnectionState.CONNECTED -> "Connected"
+    HaConnectionState.ERROR -> "Connection error — check URL/token and that the integration is installed"
 }

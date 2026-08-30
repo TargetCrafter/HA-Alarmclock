@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up HA Alarm Clock",
+        "description": "Creates the HA Alarm Clock integration so your Android app can push alarms to Home Assistant. After finishing, generate a Long-Lived Access Token from your Home Assistant profile's Security tab, and enter it together with this Home Assistant's URL in the app's settings."
+      }
+    },
+    "abort": {
+      "already_configured": "HA Alarm Clock is already set up."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "ringing": {
+        "name": "Ringing"
+      }
+    },
+    "sensor": {
+      "next_alarm": {
+        "name": "Next alarm"
+      }
+    }
+  }
+}

@@ -74,5 +74,5 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 
-    implementation(libs.hivemq.mqtt.client)
+    implementation(libs.okhttp)
 }

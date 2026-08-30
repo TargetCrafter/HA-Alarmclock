@@ -1,21 +1,21 @@
 package com.targetcrafter.haalarmclock.ui.settings
 
 import androidx.lifecycle.ViewModel
-import com.targetcrafter.haalarmclock.mqtt.MqttConnectionState
-import com.targetcrafter.haalarmclock.mqtt.MqttManager
-import com.targetcrafter.haalarmclock.mqtt.MqttSettings
-import com.targetcrafter.haalarmclock.mqtt.MqttSettingsStore
+import com.targetcrafter.haalarmclock.ha.HaConnectionState
+import com.targetcrafter.haalarmclock.ha.HaSettings
+import com.targetcrafter.haalarmclock.ha.HaSettingsStore
+import com.targetcrafter.haalarmclock.ha.HaWebSocketClient
 import kotlinx.coroutines.flow.StateFlow
 
 class SettingsViewModel(
-    private val settingsStore: MqttSettingsStore,
-    mqttManager: MqttManager,
+    private val settingsStore: HaSettingsStore,
+    webSocketClient: HaWebSocketClient,
 ) : ViewModel() {
 
-    val settings: StateFlow<MqttSettings> = settingsStore.settings
-    val connectionState: StateFlow<MqttConnectionState> = mqttManager.connectionState
+    val settings: StateFlow<HaSettings> = settingsStore.settings
+    val connectionState: StateFlow<HaConnectionState> = webSocketClient.connectionState
 
-    fun save(settings: MqttSettings) {
+    fun save(settings: HaSettings) {
         settingsStore.save(settings)
     }
 }

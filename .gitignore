@@ -11,3 +11,7 @@ local.properties
 app/build/
 app/schemas/
 *.hprof
+
+# Python (custom_components)
+__pycache__/
+*.pyc

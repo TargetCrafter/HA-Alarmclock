@@ -12,7 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.targetcrafter.haalarmclock.mqtt.HaSyncService
+import com.targetcrafter.haalarmclock.ha.HaSyncService
 import com.targetcrafter.haalarmclock.ui.alarmlist.AlarmListScreen
 import com.targetcrafter.haalarmclock.ui.editor.AlarmEditorScreen
 import com.targetcrafter.haalarmclock.ui.settings.SettingsScreen

@@ -8,7 +8,7 @@ const val ACTION_SNOOZE = "com.targetcrafter.haalarmclock.action.SNOOZE"
 const val ACTION_DISMISS = "com.targetcrafter.haalarmclock.action.DISMISS"
 
 /** Single entry point for snoozing/dismissing the currently ringing alarm, used by both the
- * on-screen ringing UI and Home Assistant-originated MQTT commands. No-ops if nothing is ringing.
+ * on-screen ringing UI and Home Assistant-originated commands. No-ops if nothing is ringing.
  */
 object AlarmActions {
     fun snooze(context: Context) = fireIfRinging(context, ACTION_SNOOZE)

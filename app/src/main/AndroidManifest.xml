@@ -64,7 +64,7 @@
             android:foregroundServiceType="mediaPlayback" />
 
         <service
-            android:name=".mqtt.HaSyncService"
+            android:name=".ha.HaSyncService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

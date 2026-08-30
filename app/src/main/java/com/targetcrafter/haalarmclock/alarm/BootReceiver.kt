@@ -5,12 +5,12 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
-import com.targetcrafter.haalarmclock.mqtt.HaSyncService
+import com.targetcrafter.haalarmclock.ha.HaSyncService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-/** AlarmManager entries and the MQTT sync service both need to be re-armed after a reboot. */
+/** AlarmManager entries and the HA sync service both need to be re-armed after a reboot. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) {
