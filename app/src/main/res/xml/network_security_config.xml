@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Most home Home Assistant installs are reached over plain HTTP on the local network
+  (e.g. http://homeassistant.local:8123), which Android blocks by default from API 28
+  onward. This app only ever talks to a Home Assistant instance the user explicitly
+  points it at in Settings, so cleartext is allowed for all destinations rather than
+  maintaining an allowlist of hostnames.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
