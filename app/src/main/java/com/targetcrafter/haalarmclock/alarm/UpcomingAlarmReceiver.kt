@@ -87,6 +87,7 @@ class UpcomingAlarmReceiver : BroadcastReceiver() {
             .setWhen(originalTriggerAtMillis)
             .setUsesChronometer(true)
             .setChronometerCountDown(true)
+            .setOngoing(true)
             .setAutoCancel(false)
             .setContentIntent(openPendingIntent)
             .addAction(0, context.getString(R.string.skip_alarm), skipPendingIntent)

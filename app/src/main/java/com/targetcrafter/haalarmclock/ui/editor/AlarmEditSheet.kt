@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -25,12 +27,13 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -48,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
@@ -71,7 +75,7 @@ fun AlarmEditSheet(alarmId: Long?, onDismiss: () -> Unit) {
     val app = HaAlarmClockApp.from(LocalContext.current)
     val viewModel: AlarmEditorViewModel = viewModel(
         key = "editor-$alarmId",
-        factory = appViewModelFactory { AlarmEditorViewModel(app.repository, alarmId) },
+        factory = appViewModelFactory { AlarmEditorViewModel(app.repository, app.appDefaultsStore, alarmId) },
     )
     val state by viewModel.state.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -81,6 +85,7 @@ fun AlarmEditSheet(alarmId: Long?, onDismiss: () -> Unit) {
 
         var soundExpanded by remember { mutableStateOf(false) }
         var snoozeExpanded by remember { mutableStateOf(false) }
+        var fadeInExpanded by remember { mutableStateOf(false) }
 
         val ringtonePickerLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
@@ -92,15 +97,15 @@ fun AlarmEditSheet(alarmId: Long?, onDismiss: () -> Unit) {
         // A fixed (rather than content-driven) height gives the FAB below a stable frame to pin
         // to, so it stays visible in place while the column beneath it scrolls, instead of
         // scrolling away with the content.
-        val sheetHeight = (LocalConfiguration.current.screenHeightDp * 0.85f).dp
+        val sheetHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
         Box(modifier = Modifier.fillMaxWidth().height(sheetHeight)) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 104.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -109,16 +114,22 @@ fun AlarmEditSheet(alarmId: Long?, onDismiss: () -> Unit) {
                 ) {
                     Text(
                         text = if (state.isNew) "New alarm" else "Edit alarm",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                     )
                     Row {
                         if (!state.isNew) {
-                            IconButton(onClick = { viewModel.delete(onDismiss) }) {
-                                Icon(Icons.Filled.Delete, contentDescription = "Delete alarm")
+                            IconButton(
+                                onClick = { viewModel.delete(onDismiss) },
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Delete alarm", modifier = Modifier.size(28.dp))
                             }
                         }
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Filled.Close, contentDescription = "Close")
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close", modifier = Modifier.size(28.dp))
                         }
                     }
                 }
@@ -126,32 +137,46 @@ fun AlarmEditSheet(alarmId: Long?, onDismiss: () -> Unit) {
                 OutlinedTextField(
                     value = state.label,
                     onValueChange = viewModel::updateLabel,
-                    label = { Text("Label") },
+                    label = { Text("Label", style = MaterialTheme.typography.bodyLarge) },
+                    textStyle = MaterialTheme.typography.bodyLarge,
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(64.dp),
                 )
 
-                Text("Repeat", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Repeat", style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ALL_DAYS.forEach { day ->
                         val selected = state.repeatDaysMask and (1 shl (day.value - 1)) != 0
                         FilterChip(
                             selected = selected,
                             onClick = { viewModel.toggleDay(day) },
-                            label = { Text(day.name.take(1)) },
+                            label = { Text(day.name.take(1), style = MaterialTheme.typography.titleSmall) },
+                            modifier = Modifier.size(48.dp),
                         )
                     }
                 }
 
                 ListItem(
-                    headlineContent = { Text("Vibrate") },
-                    trailingContent = { Switch(checked = state.vibrate, onCheckedChange = viewModel::updateVibrate) },
+                    headlineContent = { Text("Vibrate", style = MaterialTheme.typography.bodyLarge) },
+                    trailingContent = {
+                        Switch(
+                            checked = state.vibrate,
+                            onCheckedChange = viewModel::updateVibrate,
+                            modifier = Modifier.scale(1.15f),
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 ListItem(
-                    headlineContent = { Text("Fade in gently") },
-                    supportingContent = { Text("Ramps up to full volume over the first 45 seconds") },
-                    trailingContent = { Switch(checked = state.fadeInEnabled, onCheckedChange = viewModel::updateFadeIn) },
+                    headlineContent = { Text("Fade in gently", style = MaterialTheme.typography.bodyLarge) },
+                    supportingContent = { Text("Ramps up to full volume") },
+                    trailingContent = {
+                        Switch(
+                            checked = state.fadeInEnabled,
+                            onCheckedChange = viewModel::updateFadeIn,
+                            modifier = Modifier.scale(1.15f),
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -161,49 +186,108 @@ fun AlarmEditSheet(alarmId: Long?, onDismiss: () -> Unit) {
                     expanded = soundExpanded,
                     onToggle = { soundExpanded = !soundExpanded },
                 ) {
-                    Button(onClick = {
-                        val intent = android.content.Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
-                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
-                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
-                            putExtra(
-                                RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI,
-                                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
-                            )
-                            state.ringtoneUri?.let { putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(it)) }
-                        }
-                        ringtonePickerLauncher.launch(intent)
-                    }) { Text("Choose ringtone") }
+                    Button(
+                        onClick = {
+                            val intent = android.content.Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                putExtra(
+                                    RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI,
+                                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                                )
+                                state.ringtoneUri?.let { putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(it)) }
+                            }
+                            ringtonePickerLauncher.launch(intent)
+                        },
+                        contentPadding = ButtonDefaults.ContentPadding,
+                    ) { Text("Choose ringtone", style = MaterialTheme.typography.bodyLarge) }
                 }
 
                 ExpandableOptionRow(
                     title = "Snooze duration",
-                    summary = "${state.snoozeMinutes} min",
+                    summary = if (state.snoozeMinutesOverride == null) {
+                        "${state.effectiveSnoozeMinutes} min (default)"
+                    } else {
+                        "${state.effectiveSnoozeMinutes} min (custom)"
+                    },
                     expanded = snoozeExpanded,
                     onToggle = { snoozeExpanded = !snoozeExpanded },
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        FilledIconButton(onClick = { viewModel.updateSnoozeMinutes(state.snoozeMinutes - 1) }) {
-                            Icon(Icons.Filled.Remove, contentDescription = "Decrease")
-                        }
-                        Text(
-                            "${state.snoozeMinutes} min",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = 8.dp),
-                        )
-                        FilledIconButton(onClick = { viewModel.updateSnoozeMinutes(state.snoozeMinutes + 1) }) {
-                            Icon(Icons.Filled.Add, contentDescription = "Increase")
-                        }
-                    }
+                    DurationOverrideEditor(
+                        usesDefault = state.snoozeMinutesOverride == null,
+                        value = state.effectiveSnoozeMinutes,
+                        unit = "min",
+                        onUseDefaultChanged = { useDefault ->
+                            viewModel.setSnoozeMinutesOverride(if (useDefault) null else state.effectiveSnoozeMinutes)
+                        },
+                        onValueChange = { viewModel.setSnoozeMinutesOverride(it) },
+                    )
+                }
+
+                ExpandableOptionRow(
+                    title = "Fade-in duration",
+                    summary = if (state.fadeInSecondsOverride == null) {
+                        "${state.effectiveFadeInSeconds}s (default)"
+                    } else {
+                        "${state.effectiveFadeInSeconds}s (custom)"
+                    },
+                    expanded = fadeInExpanded,
+                    onToggle = { fadeInExpanded = !fadeInExpanded },
+                ) {
+                    DurationOverrideEditor(
+                        usesDefault = state.fadeInSecondsOverride == null,
+                        value = state.effectiveFadeInSeconds,
+                        unit = "s",
+                        step = 5,
+                        onUseDefaultChanged = { useDefault ->
+                            viewModel.setFadeInSecondsOverride(if (useDefault) null else state.effectiveFadeInSeconds)
+                        },
+                        onValueChange = { viewModel.setFadeInSecondsOverride(it) },
+                    )
                 }
             }
 
-            FloatingActionButton(
+            LargeFloatingActionButton(
                 onClick = { viewModel.save(onDismiss) },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(20.dp),
+                    .padding(24.dp),
             ) {
-                Icon(Icons.Filled.Check, contentDescription = "Save")
+                Icon(Icons.Filled.Check, contentDescription = "Save", modifier = Modifier.size(32.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DurationOverrideEditor(
+    usesDefault: Boolean,
+    value: Int,
+    unit: String,
+    onUseDefaultChanged: (Boolean) -> Unit,
+    onValueChange: (Int) -> Unit,
+    step: Int = 1,
+) {
+    Column {
+        ListItem(
+            headlineContent = { Text("Use app default") },
+            trailingContent = { Switch(checked = usesDefault, onCheckedChange = onUseDefaultChanged) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (!usesDefault) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                FilledIconButton(onClick = { onValueChange(value - step) }) {
+                    Icon(Icons.Filled.Remove, contentDescription = "Decrease")
+                }
+                Text(
+                    "$value $unit",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+                FilledIconButton(onClick = { onValueChange(value + step) }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Increase")
+                }
             }
         }
     }
@@ -219,12 +303,13 @@ private fun ExpandableOptionRow(
 ) {
     Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
         ListItem(
-            headlineContent = { Text(title) },
+            headlineContent = { Text(title, style = MaterialTheme.typography.bodyLarge) },
             supportingContent = { Text(summary) },
             trailingContent = {
                 Icon(
                     if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                     contentDescription = if (expanded) "Collapse" else "Expand",
+                    modifier = Modifier.size(28.dp),
                 )
             },
             modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),

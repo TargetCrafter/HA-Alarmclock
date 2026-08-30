@@ -10,6 +10,7 @@ import android.provider.Settings as AndroidSettings
 import com.targetcrafter.haalarmclock.alarm.AlarmScheduler
 import com.targetcrafter.haalarmclock.data.AlarmRepository
 import com.targetcrafter.haalarmclock.data.AppDatabase
+import com.targetcrafter.haalarmclock.data.AppDefaultsStore
 import com.targetcrafter.haalarmclock.ha.HaApiClient
 import com.targetcrafter.haalarmclock.ha.HaSettingsStore
 import com.targetcrafter.haalarmclock.ha.HaWebSocketClient
@@ -24,6 +25,7 @@ class HaAlarmClockApp : Application() {
 
     val scheduler: AlarmScheduler by lazy { AlarmScheduler(this) }
     val repository: AlarmRepository by lazy { AlarmRepository(AppDatabase.get(this).alarmDao(), scheduler) }
+    val appDefaultsStore: AppDefaultsStore by lazy { AppDefaultsStore(this) }
 
     // Shared per OkHttp's own recommendation (connection pooling); the ping interval lets the
     // WebSocket detect a dead connection instead of waiting on a TCP-level timeout.

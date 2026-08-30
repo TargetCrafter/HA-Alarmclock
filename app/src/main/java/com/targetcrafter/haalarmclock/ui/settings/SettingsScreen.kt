@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,13 +12,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -28,15 +33,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
+import com.targetcrafter.haalarmclock.data.AppDefaults
 import com.targetcrafter.haalarmclock.ha.HaConnectionState
 import com.targetcrafter.haalarmclock.ha.HaSettings
 import com.targetcrafter.haalarmclock.ui.appViewModelFactory
@@ -47,25 +55,30 @@ fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val app = HaAlarmClockApp.from(context)
     val viewModel: SettingsViewModel = viewModel(
-        factory = appViewModelFactory { SettingsViewModel(app.haSettingsStore, app.haWebSocketClient) },
+        factory = appViewModelFactory { SettingsViewModel(app.haSettingsStore, app.appDefaultsStore, app.haWebSocketClient) },
     )
     val persisted by viewModel.settings.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
+    val persistedDefaults by viewModel.appDefaults.collectAsState()
 
     var enabled by remember { mutableStateOf(persisted.enabled) }
     var baseUrl by remember { mutableStateOf(persisted.baseUrl) }
     var accessToken by remember { mutableStateOf(persisted.accessToken) }
+    var defaultSnoozeMinutes by remember { mutableIntStateOf(persistedDefaults.snoozeMinutes) }
+    var defaultFadeInSeconds by remember { mutableIntStateOf(persistedDefaults.fadeInSeconds) }
 
     LaunchedEffect(Unit) {
         enabled = persisted.enabled
         baseUrl = persisted.baseUrl
         accessToken = persisted.accessToken
+        defaultSnoozeMinutes = persistedDefaults.snoozeMinutes
+        defaultFadeInSeconds = persistedDefaults.fadeInSeconds
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Home Assistant") },
+                title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
@@ -82,6 +95,27 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            Text("Alarm defaults", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Applied to every alarm unless it sets its own value in the alarm's own editor.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            SteppedValueRow(
+                label = "Snooze duration",
+                value = defaultSnoozeMinutes,
+                unit = "min",
+                onValueChange = { defaultSnoozeMinutes = it.coerceIn(1, 60) },
+            )
+            SteppedValueRow(
+                label = "Fade-in duration",
+                value = defaultFadeInSeconds,
+                unit = "s",
+                step = 5,
+                onValueChange = { defaultFadeInSeconds = it.coerceIn(5, 300) },
+            )
+
+            HorizontalDivider()
+
             ListItem(
                 headlineContent = { Text("Sync with Home Assistant") },
                 supportingContent = { Text(connectionStatusLabel(connectionState)) },
@@ -127,11 +161,36 @@ fun SettingsScreen(onBack: () -> Unit) {
                             accessToken = accessToken.trim(),
                         ),
                     )
+                    viewModel.saveAppDefaults(
+                        AppDefaults(
+                            snoozeMinutes = defaultSnoozeMinutes,
+                            fadeInSeconds = defaultFadeInSeconds,
+                        ),
+                    )
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save") }
         }
     }
+}
+
+@Composable
+private fun SteppedValueRow(label: String, value: Int, unit: String, onValueChange: (Int) -> Unit, step: Int = 1) {
+    ListItem(
+        headlineContent = { Text(label) },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledIconButton(onClick = { onValueChange(value - step) }) {
+                    Icon(Icons.Filled.Remove, contentDescription = "Decrease $label")
+                }
+                Text("$value $unit", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 4.dp))
+                FilledIconButton(onClick = { onValueChange(value + step) }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Increase $label")
+                }
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 private fun connectionStatusLabel(state: HaConnectionState): String = when (state) {

@@ -22,10 +22,12 @@ data class Alarm(
     val repeatDaysMask: Int = 0,
     val vibrate: Boolean = true,
     val ringtoneUri: String? = null,
-    val snoozeMinutes: Int = 10,
     val fadeInEnabled: Boolean = true,
     /** Set while this alarm is snoozed; cleared when the snooze fires, or the alarm is dismissed/edited/deleted. */
     val snoozedUntilMillis: Long? = null,
+    /** Null means "use the app-wide default" (see AppDefaultsStore); non-null overrides it for this alarm only. */
+    val snoozeMinutesOverride: Int? = null,
+    val fadeInSecondsOverride: Int? = null,
 ) {
     val repeatDays: Set<DayOfWeek>
         get() = DayOfWeek.values().filter { repeatDaysMask and (1 shl (it.value - 1)) != 0 }.toSet()
@@ -49,6 +51,10 @@ data class Alarm(
         }
         error("A repeating alarm must have a next trigger within 8 days")
     }
+
+    fun effectiveSnoozeMinutes(defaults: AppDefaults): Int = snoozeMinutesOverride ?: defaults.snoozeMinutes
+
+    fun effectiveFadeInSeconds(defaults: AppDefaults): Int = fadeInSecondsOverride ?: defaults.fadeInSeconds
 
     companion object {
         fun maskOf(days: Set<DayOfWeek>): Int = days.fold(0) { acc, d -> acc or (1 shl (d.value - 1)) }

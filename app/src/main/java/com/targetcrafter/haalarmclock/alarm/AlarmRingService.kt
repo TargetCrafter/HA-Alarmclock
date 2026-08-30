@@ -27,7 +27,6 @@ import kotlinx.coroutines.launch
 
 private const val MAX_RING_DURATION_MILLIS = 10 * 60 * 1000L
 private const val NOTIFICATION_ID = 42
-private const val FADE_IN_DURATION_MILLIS = 45_000L
 private const val FADE_IN_STEP_MILLIS = 500L
 private const val FADE_IN_START_VOLUME = 0.05f
 
@@ -74,7 +73,8 @@ class AlarmRingService : LifecycleService() {
     private fun handleSnooze() {
         val alarm = currentAlarm ?: return
         val app = HaAlarmClockApp.from(this)
-        val snoozeUntil = System.currentTimeMillis() + alarm.snoozeMinutes * 60_000L
+        val snoozeMinutes = alarm.effectiveSnoozeMinutes(app.appDefaultsStore.defaults.value)
+        val snoozeUntil = System.currentTimeMillis() + snoozeMinutes * 60_000L
         app.scheduler.scheduleSnooze(alarm.id, snoozeUntil)
         // Persist the snooze mark before stopping the service (which cancels lifecycleScope) so the
         // write isn't racing self-destruction.
@@ -124,22 +124,25 @@ class AlarmRingService : LifecycleService() {
                 mediaPlayer = null
             }
         }
-        if (alarm.fadeInEnabled && mediaPlayer != null) startFadeIn()
+        if (alarm.fadeInEnabled && mediaPlayer != null) {
+            val defaults = HaAlarmClockApp.from(this).appDefaultsStore.defaults.value
+            startFadeIn(alarm.effectiveFadeInSeconds(defaults) * 1_000L)
+        }
         if (alarm.vibrate) startVibration()
     }
 
-    /** Ramps [mediaPlayer]'s volume from [FADE_IN_START_VOLUME] to full over [FADE_IN_DURATION_MILLIS]. */
-    private fun startFadeIn() {
+    /** Ramps [mediaPlayer]'s volume from [FADE_IN_START_VOLUME] to full over [durationMillis]. */
+    private fun startFadeIn(durationMillis: Long) {
         fadeJob?.cancel()
         fadeJob = lifecycleScope.launch {
             val startedAt = System.currentTimeMillis()
             while (true) {
                 val elapsed = System.currentTimeMillis() - startedAt
-                if (elapsed >= FADE_IN_DURATION_MILLIS) {
+                if (elapsed >= durationMillis) {
                     mediaPlayer?.setVolume(1f, 1f)
                     break
                 }
-                val volume = FADE_IN_START_VOLUME + (1f - FADE_IN_START_VOLUME) * (elapsed.toFloat() / FADE_IN_DURATION_MILLIS)
+                val volume = FADE_IN_START_VOLUME + (1f - FADE_IN_START_VOLUME) * (elapsed.toFloat() / durationMillis)
                 mediaPlayer?.setVolume(volume, volume)
                 delay(FADE_IN_STEP_MILLIS)
             }

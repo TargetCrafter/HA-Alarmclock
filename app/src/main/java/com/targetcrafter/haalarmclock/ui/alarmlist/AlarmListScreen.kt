@@ -15,14 +15,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFloatingActionButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -61,18 +62,18 @@ fun AlarmListScreen(onOpenSettings: () -> Unit) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeTopAppBar(
                 title = { Text("Alarms") },
                 actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    IconButton(onClick = onOpenSettings, modifier = Modifier.padding(end = 4.dp)) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings", modifier = Modifier.scale(1.2f))
                     }
                 },
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showNewAlarmSheet = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add alarm")
+            LargeFloatingActionButton(onClick = { showNewAlarmSheet = true }) {
+                Icon(Icons.Filled.Add, contentDescription = "Add alarm", modifier = Modifier.scale(1.3f))
             }
         },
     ) { padding ->
@@ -120,16 +121,16 @@ fun AlarmListScreen(onOpenSettings: () -> Unit) {
 
 @Composable
 private fun AlarmRow(alarm: Alarm, onToggle: (Boolean) -> Unit, onTimeClick: () -> Unit, onDetailsClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AlarmInfo(alarm, onTimeClick, onDetailsClick)
-            Switch(checked = alarm.enabled, onCheckedChange = onToggle)
+            Switch(checked = alarm.enabled, onCheckedChange = onToggle, modifier = Modifier.scale(1.25f))
         }
     }
 }
@@ -139,19 +140,19 @@ private fun RowScope.AlarmInfo(alarm: Alarm, onTimeClick: () -> Unit, onDetailsC
     Column(modifier = Modifier.weight(1f)) {
         Text(
             text = String.format("%02d:%02d", alarm.hour, alarm.minute),
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.clickable(onClick = onTimeClick),
+            style = MaterialTheme.typography.displayMedium,
+            modifier = Modifier.clickable(onClick = onTimeClick).padding(vertical = 4.dp),
         )
-        Column(modifier = Modifier.clickable(onClick = onDetailsClick)) {
+        Column(modifier = Modifier.clickable(onClick = onDetailsClick).padding(top = 4.dp)) {
             val subtitle = listOfNotNull(
                 alarm.label.ifBlank { null },
                 daysMaskLabel(alarm.repeatDaysMask),
             ).joinToString(" • ")
-            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium)
+            Text(text = subtitle, style = MaterialTheme.typography.bodyLarge)
             alarm.snoozedUntilMillis?.let { untilMillis ->
                 Text(
                     text = stringResource(R.string.snoozed_until, formatTime(untilMillis)),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }

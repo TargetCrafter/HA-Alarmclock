@@ -8,9 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,7 +21,6 @@ import com.targetcrafter.haalarmclock.ui.theme.HaAlarmClockTheme
 
 private const val ROUTE_LIST = "list"
 private const val ROUTE_SETTINGS = "settings"
-private const val FADE_MILLIS = 220
 
 class MainActivity : ComponentActivity() {
 
@@ -39,15 +37,16 @@ class MainActivity : ComponentActivity() {
             HaAlarmClockTheme {
                 val navController = rememberNavController()
                 // Alarm editing now happens in-place on the list screen (quick time popup,
-                // full-options sheet); only List <-> Settings is a real navigation. A plain fade
-                // instead of the default instant swap avoids the "flash" of a hard cut.
+                // full-options sheet); only List <-> Settings is a real navigation. A fade here
+                // showed a visible artifact that a plain instant cut can't: with no animated
+                // frames at all, there's nothing for a partial-alpha blend to go wrong on.
                 NavHost(
                     navController = navController,
                     startDestination = ROUTE_LIST,
-                    enterTransition = { fadeIn(animationSpec = tween(FADE_MILLIS)) },
-                    exitTransition = { fadeOut(animationSpec = tween(FADE_MILLIS)) },
-                    popEnterTransition = { fadeIn(animationSpec = tween(FADE_MILLIS)) },
-                    popExitTransition = { fadeOut(animationSpec = tween(FADE_MILLIS)) },
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
                 ) {
                     composable(ROUTE_LIST) {
                         AlarmListScreen(onOpenSettings = { navController.navigate(ROUTE_SETTINGS) })

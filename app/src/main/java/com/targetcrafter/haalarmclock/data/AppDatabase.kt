@@ -4,10 +4,10 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Alarm::class], version = 2, exportSchema = true)
+@Database(entities = [Alarm::class], version = 3, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun alarmDao(): AlarmDao
 
@@ -21,12 +21,52 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Replaces the flat snoozeMinutes column with a nullable snoozeMinutesOverride (an alarm's
+        // existing value carries over as its override, so behavior doesn't change for existing
+        // alarms) plus a new nullable fadeInSecondsOverride. SQLite can't drop/rename a column
+        // reliably across all supported versions, so this recreates the table instead.
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE alarms_new (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        hour INTEGER NOT NULL,
+                        minute INTEGER NOT NULL,
+                        label TEXT NOT NULL,
+                        enabled INTEGER NOT NULL,
+                        repeatDaysMask INTEGER NOT NULL,
+                        vibrate INTEGER NOT NULL,
+                        ringtoneUri TEXT,
+                        fadeInEnabled INTEGER NOT NULL DEFAULT 1,
+                        snoozedUntilMillis INTEGER,
+                        snoozeMinutesOverride INTEGER,
+                        fadeInSecondsOverride INTEGER
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO alarms_new
+                        (id, hour, minute, label, enabled, repeatDaysMask, vibrate, ringtoneUri,
+                         fadeInEnabled, snoozedUntilMillis, snoozeMinutesOverride)
+                    SELECT
+                        id, hour, minute, label, enabled, repeatDaysMask, vibrate, ringtoneUri,
+                        fadeInEnabled, snoozedUntilMillis, snoozeMinutes
+                    FROM alarms
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE alarms")
+                db.execSQL("ALTER TABLE alarms_new RENAME TO alarms")
+            }
+        }
+
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "ha-alarmclock.db",
-            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
         }
     }
 }

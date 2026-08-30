@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.targetcrafter.haalarmclock.data.Alarm
 import com.targetcrafter.haalarmclock.data.AlarmRepository
+import com.targetcrafter.haalarmclock.data.AppDefaultsStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,13 +22,21 @@ data class AlarmEditorUiState(
     val vibrate: Boolean = true,
     val fadeInEnabled: Boolean = true,
     val ringtoneUri: String? = null,
-    val snoozeMinutes: Int = 10,
+    /** Null means "use the app default" shown in [defaultSnoozeMinutes]. */
+    val snoozeMinutesOverride: Int? = null,
+    val fadeInSecondsOverride: Int? = null,
+    val defaultSnoozeMinutes: Int = 10,
+    val defaultFadeInSeconds: Int = 45,
     val isLoading: Boolean = true,
     val isNew: Boolean = true,
-)
+) {
+    val effectiveSnoozeMinutes: Int get() = snoozeMinutesOverride ?: defaultSnoozeMinutes
+    val effectiveFadeInSeconds: Int get() = fadeInSecondsOverride ?: defaultFadeInSeconds
+}
 
 class AlarmEditorViewModel(
     private val repository: AlarmRepository,
+    private val appDefaultsStore: AppDefaultsStore,
     private val alarmId: Long?,
 ) : ViewModel() {
 
@@ -35,6 +44,7 @@ class AlarmEditorViewModel(
     val state: StateFlow<AlarmEditorUiState> = _state.asStateFlow()
 
     init {
+        val defaults = appDefaultsStore.defaults.value
         val id = alarmId
         if (id != null) {
             viewModelScope.launch {
@@ -50,7 +60,10 @@ class AlarmEditorViewModel(
                         vibrate = alarm.vibrate,
                         fadeInEnabled = alarm.fadeInEnabled,
                         ringtoneUri = alarm.ringtoneUri,
-                        snoozeMinutes = alarm.snoozeMinutes,
+                        snoozeMinutesOverride = alarm.snoozeMinutesOverride,
+                        fadeInSecondsOverride = alarm.fadeInSecondsOverride,
+                        defaultSnoozeMinutes = defaults.snoozeMinutes,
+                        defaultFadeInSeconds = defaults.fadeInSeconds,
                         isLoading = false,
                         isNew = false,
                     )
@@ -59,7 +72,13 @@ class AlarmEditorViewModel(
                 }
             }
         } else {
-            _state.update { it.copy(isLoading = false) }
+            _state.update {
+                it.copy(
+                    defaultSnoozeMinutes = defaults.snoozeMinutes,
+                    defaultFadeInSeconds = defaults.fadeInSeconds,
+                    isLoading = false,
+                )
+            }
         }
     }
 
@@ -78,7 +97,13 @@ class AlarmEditorViewModel(
 
     fun updateRingtone(uri: String?) = _state.update { it.copy(ringtoneUri = uri) }
 
-    fun updateSnoozeMinutes(minutes: Int) = _state.update { it.copy(snoozeMinutes = minutes.coerceIn(1, 60)) }
+    /** Pass null to go back to following the app default. */
+    fun setSnoozeMinutesOverride(minutes: Int?) =
+        _state.update { it.copy(snoozeMinutesOverride = minutes?.coerceIn(1, 60)) }
+
+    /** Pass null to go back to following the app default. */
+    fun setFadeInSecondsOverride(seconds: Int?) =
+        _state.update { it.copy(fadeInSecondsOverride = seconds?.coerceIn(5, 300)) }
 
     fun save(onDone: () -> Unit) {
         val s = _state.value
@@ -94,7 +119,8 @@ class AlarmEditorViewModel(
                     vibrate = s.vibrate,
                     fadeInEnabled = s.fadeInEnabled,
                     ringtoneUri = s.ringtoneUri,
-                    snoozeMinutes = s.snoozeMinutes,
+                    snoozeMinutesOverride = s.snoozeMinutesOverride,
+                    fadeInSecondsOverride = s.fadeInSecondsOverride,
                 ),
             )
             onDone()
