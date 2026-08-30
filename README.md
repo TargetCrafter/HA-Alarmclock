@@ -40,11 +40,14 @@ lights when an alarm rings, or let HA snooze/dismiss it).
 - **10 minutes before an alarm**, a heads-up notification appears with a live
   countdown and a "Skip" action, so you can cancel that occurrence if you're already
   awake (repeating alarms just skip that one occurrence; one-off alarms get disabled).
-- Uses Material 3 Expressive (`MaterialExpressiveTheme` + `MotionScheme.expressive()`),
-  which needs a Compose BOM recent enough to include Material3 1.4+. If
-  `gradle/libs.versions.toml`'s `composeBom = "2025.09.00"` doesn't resolve, bump it to
-  whatever Android Studio's quick-fix suggests — Material3 Expressive is the one area
-  of this pass I couldn't verify against a real dependency resolution.
+- Uses plain `MaterialTheme` on stable `material3` (pinned to `1.4.0` in
+  `gradle/libs.versions.toml`, overriding the Compose BOM's own suggestion, which
+  currently maps to an older 1.3.x). Material 3 Expressive's actual theme wrapper
+  (`MaterialExpressiveTheme`, `MotionScheme.expressive()`) isn't public API yet as of
+  1.4.0 stable — it's `internal` there, only promoted to public API starting in
+  `1.5.0-alpha19`. Switch `material3` to that alpha (or later) and swap
+  `ui/theme/Theme.kt`'s `MaterialTheme` call for `MaterialExpressiveTheme` if you'd
+  rather have the real thing on a pre-release library than wait for it to stabilize.
 
 ## Project layout
 
