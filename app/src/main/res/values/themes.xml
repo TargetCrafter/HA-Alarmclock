@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.HaAlarmClock" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.HaAlarmClock.Ringing" parent="Theme.HaAlarmClock">
+        <item name="android:windowShowWhenLocked">true</item>
+        <item name="android:windowTurnScreenOn">true</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

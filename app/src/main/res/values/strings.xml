@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">HA Alarm Clock</string>
+    <string name="notification_channel_alarm_ringing">Alarm ringing</string>
+    <string name="notification_channel_ha_sync">Home Assistant sync</string>
+    <string name="ha_sync_notification_title">HA Alarm Clock</string>
+    <string name="ha_sync_notification_text_connected">Connected to Home Assistant</string>
+    <string name="ha_sync_notification_text_disconnected">Not connected to a broker</string>
+    <string name="snooze">Snooze</string>
+    <string name="dismiss">Dismiss</string>
+</resources>
