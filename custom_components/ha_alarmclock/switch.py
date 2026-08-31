@@ -1,4 +1,6 @@
-"""One switch entity per alarm, created/removed dynamically as alarms are added/deleted on the phone."""
+"""One switch entity per alarm *slot*, reused across the alarms that occupy that slot over time
+(see AlarmClockStore._reassign_slots) rather than minting a new entity per alarm ever created.
+"""
 from __future__ import annotations
 
 from homeassistant.components.switch import SwitchEntity
@@ -9,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, EVENT_COMMAND, signal_update
 from .device import build_device_info
-from .store import AlarmClockStore
+from .store import AlarmClockStore, AlarmInfo
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
@@ -23,18 +25,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             return
 
         new_entities = []
-        for alarm_id in device.alarms:
-            key = (device_id, alarm_id)
+        for slot in device.alarm_slots:
+            key = (device_id, slot)
             if key not in entities:
-                entity = AlarmSwitch(store, entry.entry_id, device_id, alarm_id)
+                entity = AlarmSwitch(store, entry.entry_id, device_id, slot)
                 entities[key] = entity
                 new_entities.append(entity)
         if new_entities:
             async_add_entities(new_entities)
-
-        for key in [k for k in entities if k[0] == device_id and k[1] not in device.alarms]:
-            stale_entity = entities.pop(key)
-            hass.async_create_task(stale_entity.async_remove(force_remove=True))
+        # Slots whose alarm was deleted are *not* removed here — the entity just goes
+        # unavailable (see AlarmSwitch.available) and is picked back up when a new alarm claims
+        # that slot number, which is the whole point of keying entities by slot instead of by the
+        # phone's own (ever-growing) alarm id.
 
     entry.async_on_unload(async_dispatcher_connect(hass, signal_update(entry.entry_id), _sync))
     for device_id in store.devices:
@@ -42,20 +44,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 
 class AlarmSwitch(SwitchEntity):
-    """Enables/disables one alarm. Optimistic: state flips immediately on command, and is
-    corrected by the next sync push if the phone disagrees (e.g. the alarm was deleted meanwhile).
+    """Enables/disables whichever alarm currently occupies this slot. Optimistic: state flips
+    immediately on command, and is corrected by the next sync push if the phone disagrees.
     """
 
     _attr_has_entity_name = False
     _attr_icon = "mdi:alarm"
     _attr_should_poll = False
 
-    def __init__(self, store: AlarmClockStore, entry_id: str, device_id: str, alarm_id: int) -> None:
+    def __init__(self, store: AlarmClockStore, entry_id: str, device_id: str, slot: int) -> None:
         self._store = store
         self._entry_id = entry_id
         self._device_id = device_id
-        self._alarm_id = alarm_id
-        self._attr_unique_id = f"{device_id}_alarm_{alarm_id}"
+        self._slot = slot
+        self._attr_unique_id = f"{device_id}_alarm_{slot}"
         self._attr_device_info = build_device_info(store, device_id)
 
     async def async_added_to_hass(self) -> None:
@@ -68,9 +70,14 @@ class AlarmSwitch(SwitchEntity):
         if device_id == self._device_id:
             self.async_write_ha_state()
 
-    def _alarm(self):
+    def _alarm(self) -> AlarmInfo | None:
         device = self._store.devices.get(self._device_id)
-        return device.alarms.get(self._alarm_id) if device else None
+        if device is None:
+            return None
+        alarm_id = device.alarm_slots.get(self._slot)
+        if alarm_id is None:
+            return None
+        return device.alarms.get(alarm_id)
 
     @property
     def available(self) -> bool:
@@ -107,16 +114,17 @@ class AlarmSwitch(SwitchEntity):
         await self._set_enabled(False)
 
     async def _set_enabled(self, enabled: bool) -> None:
+        alarm = self._alarm()
+        if alarm is None:
+            return
         self.hass.bus.async_fire(
             EVENT_COMMAND,
             {
                 "device_id": self._device_id,
                 "command": "set_alarm_enabled",
-                "alarm_id": self._alarm_id,
+                "alarm_id": alarm.id,
                 "enabled": enabled,
             },
         )
-        alarm = self._alarm()
-        if alarm is not None:
-            alarm.enabled = enabled
+        alarm.enabled = enabled
         self.async_write_ha_state()

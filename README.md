@@ -18,9 +18,20 @@ lights when an alarm rings, or let HA snooze/dismiss it).
   separate webhook secret.
   - **Phone → HA (state):** a foreground service (`HaSyncService`) POSTs alarm/ringing
     state to the integration's `/api/ha_alarmclock/sync` endpoint whenever it changes.
-    The integration turns this into entities — one `switch` per alarm, a
-    `binary_sensor` for whether an alarm is ringing, a `sensor` for the next alarm's
-    timestamp — all grouped under one HA device per phone.
+    The integration turns this into entities — one `switch` and one next-trigger
+    `sensor` per alarm, a `binary_sensor` for whether an alarm is ringing, and a
+    device-wide `sensor` for the soonest alarm across all of them — all grouped under
+    one HA device per phone.
+  - **Per-alarm entities are keyed by a reused "slot" number, not the phone's own
+    alarm id.** The phone's Room database hands out ever-increasing alarm ids, but HA
+    entities are keyed by a small stable slot (`alarm_1`, `alarm_2`, ...) that
+    `store.py`'s `AlarmClockStore._reassign_slots` reuses for the next new alarm once a
+    slot's alarm is deleted — so the entity's `unique_id`/name update in place instead
+    of a new entity being minted, the same way editing an alarm's time updates its
+    existing entity. Deleting an alarm just makes its slot's entities go unavailable
+    until a new alarm claims that slot; the number of orphaned/unavailable entities is
+    bounded by the highest number of alarms you've ever had *at once*, not the total
+    number ever created.
   - **HA → phone (commands):** the same service also opens Home Assistant's built-in
     WebSocket API (`/api/websocket`) and subscribes to a custom `ha_alarmclock_command`
     event, which the integration fires when you flip a switch or press one of the
@@ -40,6 +51,10 @@ lights when an alarm rings, or let HA snooze/dismiss it).
 - **10 minutes before an alarm**, a heads-up notification appears with a live
   countdown and a "Skip" action, so you can cancel that occurrence if you're already
   awake (repeating alarms just skip that one occurrence; one-off alarms get disabled).
+- **The fullscreen ringing screen uses large, full-width, stacked Dismiss/Snooze
+  buttons** (96dp tall, distinct filled colors, an icon plus large text each) instead
+  of two side-by-side outlined buttons, so they're easy to tell apart and hit
+  accurately the moment you wake up.
 - Uses plain `MaterialTheme` on stable `material3` (pinned to `1.4.0` in
   `gradle/libs.versions.toml`, overriding the Compose BOM's own suggestion, which
   currently maps to an older 1.3.x). Material 3 Expressive's actual theme wrapper
@@ -78,8 +93,9 @@ custom_components/ha_alarmclock/   Home Assistant custom integration (Python)
 3. In your HA profile (bottom left → your name) → Security tab → generate a
    **Long-Lived Access Token**.
 4. In the Android app's Settings screen, enter your Home Assistant URL and that token,
-   and enable sync. A device (with its alarms as switches, a ringing sensor, a next-alarm
-   sensor, and snooze/dismiss buttons) appears in HA the first time it pushes.
+   and enable sync. A device (with its alarms as switches and next-trigger sensors, a
+   ringing sensor, a device-wide next-alarm sensor, and snooze/dismiss buttons) appears
+   in HA the first time it pushes.
 
 Only one instance of the integration is needed even with multiple phones — each
 device that pushes to it shows up as its own HA device automatically.
@@ -99,9 +115,10 @@ that doesn't compile.
 ```
 
 The Python integration's structure *has* been validated: all modules import cleanly
-against a real installed `homeassistant` package (2024.3.3), and `store.py`'s payload
-handling and the entity classes were exercised directly (construction, dynamic
-add/remove of alarm switches, timestamp parsing). What's untested is the full runtime
+against a real installed `homeassistant` package, and `store.py`'s payload handling —
+including slot assignment/reuse — and the entity classes were exercised directly
+(construction, entities going unavailable and being picked back up when a new alarm
+claims a freed slot, timestamp parsing). What's untested is the full runtime
 path inside an actual Home Assistant instance (config flow with a real `hass`, the
 HTTP view wired through HA's auth middleware, the dispatcher signals end-to-end) —
 worth a real smoke test before relying on it.

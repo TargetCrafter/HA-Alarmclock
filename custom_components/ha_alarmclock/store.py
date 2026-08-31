@@ -43,6 +43,10 @@ class DeviceState:
     alarms: dict[int, AlarmInfo] = field(default_factory=dict)
     ringing: RingingInfo = field(default_factory=RingingInfo)
     next_alarm: NextAlarmInfo = field(default_factory=NextAlarmInfo)
+    # slot -> alarm_id, for the currently-existing alarms. Slots are small, stable numbers
+    # (1, 2, 3, ...) that entities are keyed on instead of the app's own (ever-growing) alarm id,
+    # and get reused for the next new alarm once freed — see AlarmClockStore._reassign_slots.
+    alarm_slots: dict[int, int] = field(default_factory=dict)
 
 
 class AlarmClockStore:
@@ -90,4 +94,28 @@ class AlarmClockStore:
             trigger_at=next_alarm.get("trigger_at"),
         )
 
+        self._reassign_slots(device)
+
         return device, is_new
+
+    @staticmethod
+    def _reassign_slots(device: DeviceState) -> None:
+        """Keeps device.alarm_slots pointing at whatever alarms currently exist, reusing the
+        smallest free slot number for any alarm that doesn't have one yet. A slot's entities stay
+        registered in HA (as unavailable) when its alarm is deleted, ready to be picked up by the
+        next new alarm, rather than each new alarm ever created minting a fresh entity forever.
+        """
+        current_ids = set(device.alarms.keys())
+
+        for slot, alarm_id in list(device.alarm_slots.items()):
+            if alarm_id not in current_ids:
+                del device.alarm_slots[slot]
+
+        assigned_ids = set(device.alarm_slots.values())
+        used_slots = set(device.alarm_slots.keys())
+        next_slot = 1
+        for alarm_id in sorted(current_ids - assigned_ids):
+            while next_slot in used_slots:
+                next_slot += 1
+            device.alarm_slots[next_slot] = alarm_id
+            used_slots.add(next_slot)
