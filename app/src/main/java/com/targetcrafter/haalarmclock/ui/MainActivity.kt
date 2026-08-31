@@ -9,27 +9,36 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
-import androidx.navigation.NavController
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.targetcrafter.haalarmclock.HaAlarmClockApp
 import com.targetcrafter.haalarmclock.R
 import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.alarmlist.AlarmListScreen
@@ -37,11 +46,17 @@ import com.targetcrafter.haalarmclock.ui.clock.ClockScreen
 import com.targetcrafter.haalarmclock.ui.settings.SettingsScreen
 import com.targetcrafter.haalarmclock.ui.theme.HaAlarmClockTheme
 import com.targetcrafter.haalarmclock.ui.timerlist.TimerListScreen
+import kotlinx.coroutines.launch
 
-private const val ROUTE_LIST = "list"
-private const val ROUTE_TIMERS = "timers"
-private const val ROUTE_CLOCK = "clock"
+private const val ROUTE_TABS = "tabs"
 private const val ROUTE_SETTINGS = "settings"
+
+/** Clock first, per the reordering the user asked for. */
+private enum class Tab(val labelRes: Int, val filledIcon: ImageVector, val outlinedIcon: ImageVector) {
+    CLOCK(R.string.tab_clock, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
+    ALARMS(R.string.tab_alarms, Icons.Filled.Alarm, Icons.Outlined.Alarm),
+    TIMERS(R.string.tab_timers, Icons.Filled.Timer, Icons.Outlined.Timer),
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -57,63 +72,23 @@ class MainActivity : ComponentActivity() {
         setContent {
             HaAlarmClockTheme {
                 val navController = rememberNavController()
-                val currentDestination by navController.currentBackStackEntryAsState()
-                val showBottomBar = currentDestination?.destination?.hierarchy?.any {
-                    it.route == ROUTE_LIST || it.route == ROUTE_TIMERS || it.route == ROUTE_CLOCK
-                } == true
-
-                Scaffold(
-                    bottomBar = {
-                        if (showBottomBar) {
-                            NavigationBar {
-                                NavigationBarItem(
-                                    selected = currentDestination?.destination?.hierarchy?.any { it.route == ROUTE_LIST } == true,
-                                    onClick = { navController.navigateToTab(ROUTE_LIST) },
-                                    icon = { Icon(Icons.Filled.Alarm, contentDescription = null) },
-                                    label = { Text(stringResource(R.string.tab_alarms)) },
-                                )
-                                NavigationBarItem(
-                                    selected = currentDestination?.destination?.hierarchy?.any { it.route == ROUTE_TIMERS } == true,
-                                    onClick = { navController.navigateToTab(ROUTE_TIMERS) },
-                                    icon = { Icon(Icons.Filled.Timer, contentDescription = null) },
-                                    label = { Text(stringResource(R.string.tab_timers)) },
-                                )
-                                NavigationBarItem(
-                                    selected = currentDestination?.destination?.hierarchy?.any { it.route == ROUTE_CLOCK } == true,
-                                    onClick = { navController.navigateToTab(ROUTE_CLOCK) },
-                                    icon = { Icon(Icons.Filled.AccessTime, contentDescription = null) },
-                                    label = { Text(stringResource(R.string.tab_clock)) },
-                                )
-                            }
-                        }
-                    },
-                ) { innerPadding ->
-                    // Alarm/timer editing happens in-place on their own list screens (quick time
-                    // popup, full-options sheet, add-timer dialog); only List/Timers <-> Settings
-                    // is a real navigation. A fade here showed a visible artifact that a plain
-                    // instant cut can't: with no animated frames at all, there's nothing for a
-                    // partial-alpha blend to go wrong on.
-                    NavHost(
-                        navController = navController,
-                        startDestination = ROUTE_LIST,
-                        enterTransition = { EnterTransition.None },
-                        exitTransition = { ExitTransition.None },
-                        popEnterTransition = { EnterTransition.None },
-                        popExitTransition = { ExitTransition.None },
-                        modifier = Modifier.padding(innerPadding),
-                    ) {
-                        composable(ROUTE_LIST) {
-                            AlarmListScreen(onOpenSettings = { navController.navigate(ROUTE_SETTINGS) })
-                        }
-                        composable(ROUTE_TIMERS) {
-                            TimerListScreen(onOpenSettings = { navController.navigate(ROUTE_SETTINGS) })
-                        }
-                        composable(ROUTE_CLOCK) {
-                            ClockScreen(onOpenSettings = { navController.navigate(ROUTE_SETTINGS) })
-                        }
-                        composable(ROUTE_SETTINGS) {
-                            SettingsScreen(onBack = { navController.popBackStack() })
-                        }
+                // Only Tabs <-> Settings is a real navigation; switching between the three tabs
+                // themselves is a HorizontalPager, not a nav-graph destination — see TabsScreen. A
+                // fade here showed a visible artifact that a plain instant cut can't: with no
+                // animated frames at all, there's nothing for a partial-alpha blend to go wrong on.
+                NavHost(
+                    navController = navController,
+                    startDestination = ROUTE_TABS,
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
+                ) {
+                    composable(ROUTE_TABS) {
+                        TabsScreen(onOpenSettings = { navController.navigate(ROUTE_SETTINGS) })
+                    }
+                    composable(ROUTE_SETTINGS) {
+                        SettingsScreen(onBack = { navController.popBackStack() })
                     }
                 }
             }
@@ -130,12 +105,43 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Standard bottom-nav-tab navigation: switching tabs doesn't grow the back stack, and returning
- * to a previously-visited tab restores its scroll/dialog state instead of resetting it. */
-private fun NavController.navigateToTab(route: String) {
-    navigate(route) {
-        popUpTo(graph.findStartDestination().id) { saveState = true }
-        launchSingleTop = true
-        restoreState = true
+@Composable
+private fun TabsScreen(onOpenSettings: () -> Unit) {
+    val app = HaAlarmClockApp.from(LocalContext.current)
+    val savedTabIndex by app.tabPreferencesStore.lastTabIndex.collectAsState()
+    val pagerState = rememberPagerState(initialPage = savedTabIndex.coerceIn(0, Tab.entries.size - 1)) { Tab.entries.size }
+    val scope = rememberCoroutineScope()
+
+    // Persists the tab the user ends up on, whether they got there by swiping or tapping the
+    // bottom nav, so the app reopens on it next time instead of always defaulting to Clock.
+    LaunchedEffect(pagerState.currentPage) {
+        app.tabPreferencesStore.save(pagerState.currentPage)
+    }
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                Tab.entries.forEachIndexed { index, tab ->
+                    val selected = pagerState.currentPage == index
+                    NavigationBarItem(
+                        selected = selected,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                        icon = { Icon(if (selected) tab.filledIcon else tab.outlinedIcon, contentDescription = null) },
+                        label = { Text(stringResource(tab.labelRes)) },
+                    )
+                }
+            }
+        },
+    ) { innerPadding ->
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.padding(innerPadding).fillMaxSize(),
+        ) { page ->
+            when (Tab.entries[page]) {
+                Tab.CLOCK -> ClockScreen(onOpenSettings = onOpenSettings)
+                Tab.ALARMS -> AlarmListScreen(onOpenSettings = onOpenSettings)
+                Tab.TIMERS -> TimerListScreen(onOpenSettings = onOpenSettings)
+            }
+        }
     }
 }

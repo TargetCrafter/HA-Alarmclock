@@ -18,11 +18,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFloatingActionButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,11 +62,11 @@ fun AlarmListScreen(onOpenSettings: () -> Unit) {
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = { Text("Alarms") },
                 actions = {
-                    IconButton(onClick = onOpenSettings, modifier = Modifier.padding(end = 4.dp)) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings", modifier = Modifier.scale(1.2f))
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
                 },
             )
@@ -106,6 +106,10 @@ fun AlarmListScreen(onOpenSettings: () -> Unit) {
             onDismiss = { quickTimeAlarm = null },
             onConfirm = { hour, minute ->
                 viewModel.updateTime(alarm, hour, minute)
+                quickTimeAlarm = null
+            },
+            onDelete = {
+                viewModel.delete(alarm)
                 quickTimeAlarm = null
             },
         )

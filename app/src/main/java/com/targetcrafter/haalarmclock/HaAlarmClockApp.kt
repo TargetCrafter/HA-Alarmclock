@@ -12,16 +12,17 @@ import com.targetcrafter.haalarmclock.data.AlarmRepository
 import com.targetcrafter.haalarmclock.data.AppDatabase
 import com.targetcrafter.haalarmclock.data.AppDefaultsStore
 import com.targetcrafter.haalarmclock.data.ClockPreferencesStore
+import com.targetcrafter.haalarmclock.data.TabPreferencesStore
 import com.targetcrafter.haalarmclock.data.TimerRepository
 import com.targetcrafter.haalarmclock.data.WidgetAppearanceStore
 import com.targetcrafter.haalarmclock.data.WorldClockStore
 import com.targetcrafter.haalarmclock.ha.HaApiClient
 import com.targetcrafter.haalarmclock.ha.HaSettingsStore
 import com.targetcrafter.haalarmclock.ha.HaWebSocketClient
-import com.targetcrafter.haalarmclock.icon.DynamicIconUpdater
 import com.targetcrafter.haalarmclock.timer.TimerNotifications
 import com.targetcrafter.haalarmclock.timer.TimerScheduler
 import com.targetcrafter.haalarmclock.widget.ClockWidgetUpdater
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +43,7 @@ class HaAlarmClockApp : Application() {
     val clockPreferencesStore: ClockPreferencesStore by lazy { ClockPreferencesStore(this) }
     val widgetAppearanceStore: WidgetAppearanceStore by lazy { WidgetAppearanceStore(this) }
     val worldClockStore: WorldClockStore by lazy { WorldClockStore(this) }
+    val tabPreferencesStore: TabPreferencesStore by lazy { TabPreferencesStore(this) }
 
     val timerScheduler: TimerScheduler by lazy { TimerScheduler(this) }
     private val timerNotifications: TimerNotifications by lazy { TimerNotifications(this) }
@@ -66,7 +68,14 @@ class HaAlarmClockApp : Application() {
     }
     val deviceName: String by lazy { "${Build.MANUFACTURER} ${Build.MODEL} Alarm Clock".trim() }
 
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // SupervisorJob alone doesn't stop an uncaught exception from crashing the whole app — it only
+    // stops sibling coroutines from being cancelled by one that fails. A background task here
+    // (widget/HA sync upkeep) failing shouldn't be able to take the whole app down with it.
+    private val applicationScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
+            android.util.Log.e("HaAlarmClockApp", "Unhandled exception in application-scope coroutine", throwable)
+        },
+    )
 
     override fun onCreate() {
         super.onCreate()
@@ -79,8 +88,6 @@ class HaAlarmClockApp : Application() {
         applicationScope.launch {
             widgetAppearanceStore.appearance.collect { ClockWidgetUpdater.updateAll(this@HaAlarmClockApp) }
         }
-        applicationScope.launch { DynamicIconUpdater.applyNow(this@HaAlarmClockApp) }
-        DynamicIconUpdater.schedulePeriodic(this)
     }
 
     private fun createNotificationChannels() {

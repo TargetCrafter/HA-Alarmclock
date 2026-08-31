@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -16,7 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /** A quick "just change the time" popup — tapping an alarm's time in the list opens this instead
- * of the full editor, so a common edit doesn't require navigating anywhere. */
+ * of the full editor, so a common edit doesn't require navigating anywhere. Also offers deleting
+ * the alarm outright, so that doesn't require the full editor either.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickTimeDialog(
@@ -24,6 +27,7 @@ fun QuickTimeDialog(
     initialMinute: Int,
     onDismiss: () -> Unit,
     onConfirm: (hour: Int, minute: Int) -> Unit,
+    onDelete: () -> Unit,
 ) {
     val timeState = rememberTimePickerState(initialHour = initialHour, initialMinute = initialMinute, is24Hour = true)
     AlertDialog(
@@ -37,6 +41,13 @@ fun QuickTimeDialog(
         text = {
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
                 TimePicker(state = timeState)
+            }
+        },
+        title = {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDelete) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
             }
         },
     )

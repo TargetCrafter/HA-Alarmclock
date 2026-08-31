@@ -1,11 +1,11 @@
 # HA Alarm Clock
 
 An Android alarm clock and timer app that works fully offline like the stock Clock
-app, with a world-clock tab, recolorable analog/digital home-screen widgets, and a
-dynamic clock launcher icon, and optionally connects directly to Home Assistant — via
-a custom integration, no MQTT broker required — so you can build automations around
-your alarms and timers (e.g. turn on lights when an alarm rings, let HA snooze/dismiss
-it, or ask Assist to set an alarm for you).
+app, with a world-clock tab and recolorable analog/digital home-screen widgets, and
+optionally connects directly to Home Assistant — via a custom integration, no MQTT
+broker required — so you can build automations around your alarms and timers (e.g.
+turn on lights when an alarm rings, let HA snooze/dismiss it, or ask Assist to set an
+alarm for you).
 
 ## How it works
 
@@ -63,9 +63,13 @@ it, or ask Assist to set an alarm for you).
 
 ## UI/UX notes
 
-- **Alarms, Timers, and Clock are separate bottom-nav tabs**, each with their own
-  Settings entry point; switching tabs preserves each screen's state instead of
-  resetting it.
+- **Clock, Alarms, and Timers are separate bottom-nav tabs** (Clock first), swipeable
+  with a `HorizontalPager` as well as tappable, with matching filled/outlined icon
+  states (filled = selected, outlined = not, for all three consistently) so the bottom
+  nav reads as one style rather than a mismatched one. The app reopens on whichever tab
+  you had open last (`TabPreferencesStore`), not always the first one. Each tab has its
+  own Settings entry point, top-right on a compact `TopAppBar` (switched from
+  `LargeTopAppBar`, which read as sitting lower thanks to the large title block below it).
 - **The Clock tab shows the live local time (with seconds), switchable between analog
   and digital in Settings**, plus an addable/removable list of other timezones —
   app-local only, never synced to HA. World clock rows stay plain digital text
@@ -74,10 +78,12 @@ it, or ask Assist to set an alarm for you).
   live with Compose's `Canvas` (`ui/clock/AnalogClockFace.kt`), including a second
   hand — the one place in the app seconds are shown continuously.
 - **Editing is in-place, not a separate screen.** Tap an alarm's time for a quick
-  time-only popup; tap its label/repeat area for the full options sheet (label, repeat
-  days, vibrate, fade-in, ringtone, snooze duration), which opens as a tall bottom
-  sheet with an always-visible floating Save button rather than a scrolling screen.
-  Timers get a similarly lightweight add dialog (H/M/S steppers + an optional name).
+  time-only popup — which now also has a Delete action, so removing an alarm doesn't
+  require opening the full editor either — or tap its label/repeat area for the full
+  options sheet (label, repeat days, vibrate, fade-in, ringtone, snooze duration),
+  which opens as a tall bottom sheet with an always-visible floating Save button rather
+  than a scrolling screen. Timers get a similarly lightweight add dialog (H/M/S
+  steppers + an optional name).
 - **Fade-in is on by default.** Alarms ramp from near-silent to full volume over the
   first 45 seconds; toggle it per-alarm in the options sheet.
 - **A snoozed alarm shows a "Snoozed until HH:MM" badge** on its row until it rings
@@ -99,7 +105,15 @@ it, or ask Assist to set an alarm for you).
   self-rescheduling `AlarmManager` trigger (`AnalogWidgetTicker`) that's only ever
   armed while an analog widget instance actually exists (armed in `onEnabled`/
   `onUpdate`/after reboot, cancelled the moment the last instance is removed in
-  `onDisabled`).
+  `onDisabled`). A since-removed "dynamic launcher icon" feature also turned out to be
+  crashing the app on every launch (`PackageManager.setComponentEnabledSetting` on an
+  `activity-alias` failing inside an uncaught coroutine) — which meant *no* widget
+  update had ever actually reached the device, since Android runs `Application.onCreate()`
+  before delivering any broadcast/widget callback; that alone was enough to explain the
+  blank analog widget without any bug in the renderer itself. `HaAlarmClockApp`'s
+  background coroutine scope now also carries a `CoroutineExceptionHandler` that logs
+  instead of crashing, so a bug in one background task can't take the whole app down
+  with it again.
 - **Both widgets' colors are configurable in Settings** — a background and a
   foreground (hands/text) color, each pickable from a preset swatch row or typed as a
   hex code, applied live via `RemoteViews.setInt(..., "setBackgroundColor", ...)` /
@@ -110,17 +124,6 @@ it, or ask Assist to set an alarm for you).
   rounded corners on Android 11 and below — Android 12+ launchers round/clip every
   widget's outer bounds automatically regardless of its own background, so this only
   matters pre-12.
-- **The launcher icon is a "dynamic" analog clock, hourly.** There's no public Android
-  API for a third-party app to animate its own launcher icon in real time — the
-  launcher caches icons as static bitmaps, and true live-ticking hands are a
-  Pixel-Launcher-only trick reserved for Google's own Clock app. This uses the same
-  technique "dynamic date" icon apps (e.g. calendar apps) rely on instead: twelve
-  pre-rendered icon variants (`ic_launcher_clock_00`..`11`, one hour hand position
-  each) wired up as `activity-alias` entries in the manifest, with exactly one enabled
-  at a time. `DynamicIconUpdater` flips which one via `PackageManager
-  .setComponentEnabledSetting`, on app start and on an hourly `WorkManager` periodic
-  job (Android's 15-minute floor on periodic work, plus Doze/battery-optimization
-  deferrals, mean "hourly" is a target, not a guarantee).
 - Uses plain `MaterialTheme` on stable `material3` (pinned to `1.4.0` in
   `gradle/libs.versions.toml`, overriding the Compose BOM's own suggestion, which
   currently maps to an older 1.3.x). Material 3 Expressive's actual theme wrapper
@@ -144,14 +147,15 @@ app/src/main/java/com/targetcrafter/haalarmclock/
             AnalogClockRenderer (hand-drawn bitmap face), AnalogWidgetTicker
             (its once-a-minute redraw trigger), ClockWidgetUpdater (pushes colors +
             next-alarm text into every instance of both)
-  icon/     DynamicIconUpdater — the hourly dynamic launcher icon
   ha/       HA settings storage, the REST push client, the command WebSocket
             client, and the foreground service that ties them together
   ui/       Jetpack Compose screens (alarm list, timer list, clock/world clocks,
-            editor, settings) + ViewModels; data/ holds the plain-SharedPreferences
-            stores behind Settings' new clock-style and widget-color pickers, and the
-            world-clock timezone list (ClockPreferencesStore, WidgetAppearanceStore,
-            WorldClockStore)
+            editor, settings) + ViewModels; MainActivity's TabsScreen is the
+            HorizontalPager + bottom nav shared by all three main tabs; data/ holds
+            the plain-SharedPreferences stores behind Settings' clock-style and
+            widget-color pickers, the world-clock timezone list, and the
+            last-open-tab memory (ClockPreferencesStore, WidgetAppearanceStore,
+            WorldClockStore, TabPreferencesStore)
 
 custom_components/ha_alarmclock/   Home Assistant custom integration (Python)
   __init__.py     sets up the REST view + Assist + forwards to the platforms below
@@ -224,14 +228,13 @@ a real smoke test before relying on it.
 - `RECEIVE_BOOT_COMPLETED` — alarms, timers, and the HA connection are re-armed after
   reboot (AlarmManager entries don't survive one on their own).
 
-No new dangerous permission was needed for timers, the widgets, or the dynamic icon;
-`androidx.work:work-runtime-ktx` (added for the icon's hourly job) doesn't declare any
-beyond what's already here.
+No new dangerous permission was needed for timers or the widgets.
 
 ## Not yet implemented
 
-A stopwatch (alarms, timers, widgets, a dynamic icon, a Clock tab with world clocks,
-and Assist integration are all in now). The HA access token is stored in
+A stopwatch, and a redesigned app icon (a replacement is planned but blocked on
+getting the actual source asset into the repo). Alarms, timers, widgets, and a Clock
+tab with world clocks are all in. The HA access token is stored in
 `EncryptedSharedPreferences`; clock style, widget colors, and the world-clock list are
 in plain (unencrypted) SharedPreferences, since none of it is sensitive. The
 integration's device state lives in memory only — it's rebuilt from the phone's next

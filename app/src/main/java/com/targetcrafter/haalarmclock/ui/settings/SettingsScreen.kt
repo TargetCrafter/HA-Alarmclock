@@ -22,9 +22,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -113,6 +114,28 @@ fun SettingsScreen(onBack: () -> Unit) {
         widgetAppearance = persistedWidgetAppearance
     }
 
+    fun save() {
+        viewModel.save(
+            HaSettings(
+                enabled = enabled,
+                baseUrl = baseUrl.trim(),
+                accessToken = accessToken.trim(),
+            ),
+        )
+        viewModel.saveAppDefaults(
+            AppDefaults(
+                snoozeMinutes = defaultSnoozeMinutes,
+                fadeInSeconds = defaultFadeInSeconds,
+            ),
+        )
+        viewModel.saveClockStyle(clockStyle)
+        viewModel.saveWidgetAppearance(widgetAppearance)
+        // The sync service only ever gets started when sync is configured (so its notification
+        // doesn't show otherwise); if the user just turned it on, start it now instead of waiting
+        // for the next app launch. A no-op if already running.
+        startHaSyncServiceIfConfigured(context)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -124,13 +147,23 @@ fun SettingsScreen(onBack: () -> Unit) {
                 },
             )
         },
+        floatingActionButton = {
+            // Floating and outside the scrollable column so it's always reachable, however far
+            // down the settings list you've scrolled — not just when you happen to be at the bottom.
+            ExtendedFloatingActionButton(
+                onClick = ::save,
+                icon = { Icon(Icons.Filled.Check, contentDescription = null) },
+                text = { Text("Save") },
+            )
+        },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(16.dp)
+                .padding(bottom = 72.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text("Alarm defaults", style = MaterialTheme.typography.titleMedium)
@@ -230,31 +263,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                 enabled = baseUrl.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Open Home Assistant profile") }
-
-            Button(
-                onClick = {
-                    viewModel.save(
-                        HaSettings(
-                            enabled = enabled,
-                            baseUrl = baseUrl.trim(),
-                            accessToken = accessToken.trim(),
-                        ),
-                    )
-                    viewModel.saveAppDefaults(
-                        AppDefaults(
-                            snoozeMinutes = defaultSnoozeMinutes,
-                            fadeInSeconds = defaultFadeInSeconds,
-                        ),
-                    )
-                    viewModel.saveClockStyle(clockStyle)
-                    viewModel.saveWidgetAppearance(widgetAppearance)
-                    // The sync service only ever gets started when sync is configured (so its
-                    // notification doesn't show otherwise); if the user just turned it on, start
-                    // it now instead of waiting for the next app launch. A no-op if already running.
-                    startHaSyncServiceIfConfigured(context)
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Save") }
         }
     }
 }
