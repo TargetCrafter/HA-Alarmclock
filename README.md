@@ -1,11 +1,11 @@
 # HA Alarm Clock
 
 An Android alarm clock and timer app that works fully offline like the stock Clock
-app, with analog/digital home-screen widgets and a dynamic clock launcher icon, and
-optionally connects directly to Home Assistant — via a custom integration, no MQTT
-broker required — so you can build automations around your alarms and timers (e.g.
-turn on lights when an alarm rings, let HA snooze/dismiss it, or ask Assist to set an
-alarm for you).
+app, with a world-clock tab, recolorable analog/digital home-screen widgets, and a
+dynamic clock launcher icon, and optionally connects directly to Home Assistant — via
+a custom integration, no MQTT broker required — so you can build automations around
+your alarms and timers (e.g. turn on lights when an alarm rings, let HA snooze/dismiss
+it, or ask Assist to set an alarm for you).
 
 ## How it works
 
@@ -27,13 +27,14 @@ alarm for you).
   separate webhook secret.
   - **Phone → HA (state):** a foreground service (`HaSyncService`) POSTs alarm/timer/
     ringing state to the integration's `/api/ha_alarmclock/sync` endpoint whenever it
-    changes — plus, while a timer is running, on a short interval so its remaining-time
-    sensor keeps advancing in HA (the only place this integration isn't purely
-    push-based; every other entity only updates on an actual state change). The
-    integration turns this into entities: one `switch` and next-trigger `sensor` per
-    alarm, one trigger-time `sensor` and one remaining-time `sensor` per timer, a
-    `binary_sensor` for whether an alarm is ringing, and a device-wide `sensor` for the
-    soonest alarm across all of them — all grouped under one HA device per phone.
+    changes — purely push-based, no polling, ever. The integration turns this into
+    entities: one `switch` and next-trigger `sensor` per alarm, one trigger-time
+    `sensor` per timer, a `binary_sensor` for whether an alarm is ringing, and a
+    device-wide `sensor` for the soonest alarm across all of them — all grouped under
+    one HA device per phone. A timer's *remaining* time isn't exposed to HA at all —
+    it changed too often to push at a reasonable rate without turning this into a
+    polling integration, and simply wasn't a useful HA-side signal once considered
+    (only its trigger time is genuinely useful for automations).
   - **Per-alarm and per-timer entities are keyed by a reused "slot" number, not the
     phone's own alarm/timer id.** The phone's Room database hands out ever-increasing
     ids, but HA entities are keyed by a small stable slot (`alarm_1`, `alarm_2`, ...;
@@ -62,8 +63,16 @@ alarm for you).
 
 ## UI/UX notes
 
-- **Alarms and Timers are separate bottom-nav tabs**, each with their own Settings
-  entry point; switching tabs preserves each screen's state instead of resetting it.
+- **Alarms, Timers, and Clock are separate bottom-nav tabs**, each with their own
+  Settings entry point; switching tabs preserves each screen's state instead of
+  resetting it.
+- **The Clock tab shows the live local time (with seconds), switchable between analog
+  and digital in Settings**, plus an addable/removable list of other timezones —
+  app-local only, never synced to HA. World clock rows stay plain digital text
+  (`HH:mm` + a "tomorrow"/"yesterday" note when the date differs) regardless of that
+  setting; only the big local-time display switches style. The analog face is drawn
+  live with Compose's `Canvas` (`ui/clock/AnalogClockFace.kt`), including a second
+  hand — the one place in the app seconds are shown continuously.
 - **Editing is in-place, not a separate screen.** Tap an alarm's time for a quick
   time-only popup; tap its label/repeat area for the full options sheet (label, repeat
   days, vibrate, fade-in, ringtone, snooze duration), which opens as a tall bottom
@@ -80,9 +89,27 @@ alarm for you).
   buttons** (96dp tall, distinct filled colors, an icon plus large text each) instead
   of two side-by-side outlined buttons, so they're easy to tell apart and hit
   accurately the moment you wake up.
-- **Two home-screen widgets** — analog and digital clock — both self-updating (system
-  `AnalogClock`/`TextClock` views tick on their own, no code involved) and both showing
-  a live "Next: HH:mm" line for the soonest alarm, refreshed whenever alarms change.
+- **Two home-screen widgets** — analog and digital clock — both showing a live
+  "Next: HH:mm" line for the soonest alarm, refreshed whenever alarms change. The
+  digital widget's `TextClock` still ticks on its own with no code involved; the
+  analog widget's face used to be the system `android.widget.AnalogClock`, but that
+  rendered blank in practice (and, being a fixed system drawable, couldn't be
+  recolored anyway) — it's now drawn to a `Bitmap` by hand (`AnalogClockRenderer`) and
+  pushed via `RemoteViews.setImageViewBitmap`, redrawn once a minute by a
+  self-rescheduling `AlarmManager` trigger (`AnalogWidgetTicker`) that's only ever
+  armed while an analog widget instance actually exists (armed in `onEnabled`/
+  `onUpdate`/after reboot, cancelled the moment the last instance is removed in
+  `onDisabled`).
+- **Both widgets' colors are configurable in Settings** — a background and a
+  foreground (hands/text) color, each pickable from a preset swatch row or typed as a
+  hex code, applied live via `RemoteViews.setInt(..., "setBackgroundColor", ...)` /
+  `setTextColor`/the bitmap renderer. Default is grayscale (`#2E2E2E` background,
+  `#E8E8E8` foreground) so the widgets blend into as many wallpapers/launchers as
+  possible out of the box; a "Reset to default" button restores that. One caveat:
+  because the color is applied as a plain `ColorDrawable`, the widgets lose their
+  rounded corners on Android 11 and below — Android 12+ launchers round/clip every
+  widget's outer bounds automatically regardless of its own background, so this only
+  matters pre-12.
 - **The launcher icon is a "dynamic" analog clock, hourly.** There's no public Android
   API for a third-party app to animate its own launcher icon in real time — the
   launcher caches icons as static bitmaps, and true live-ticking hands are a
@@ -113,11 +140,18 @@ app/src/main/java/com/targetcrafter/haalarmclock/
   timer/    the timer counterpart to alarm/ — TimerScheduler, TimerReceiver
             (trigger + notification Pause/Resume/Cancel actions), TimerService
             (ringing phase only), TimerNotifications (the live countdown one)
-  widget/   the analog/digital clock home-screen widgets (AppWidgetProviders)
+  widget/   the analog/digital clock home-screen widgets — AppWidgetProviders,
+            AnalogClockRenderer (hand-drawn bitmap face), AnalogWidgetTicker
+            (its once-a-minute redraw trigger), ClockWidgetUpdater (pushes colors +
+            next-alarm text into every instance of both)
   icon/     DynamicIconUpdater — the hourly dynamic launcher icon
   ha/       HA settings storage, the REST push client, the command WebSocket
             client, and the foreground service that ties them together
-  ui/       Jetpack Compose screens (alarm list, timer list, editor, settings) + ViewModels
+  ui/       Jetpack Compose screens (alarm list, timer list, clock/world clocks,
+            editor, settings) + ViewModels; data/ holds the plain-SharedPreferences
+            stores behind Settings' new clock-style and widget-color pickers, and the
+            world-clock timezone list (ClockPreferencesStore, WidgetAppearanceStore,
+            WorldClockStore)
 
 custom_components/ha_alarmclock/   Home Assistant custom integration (Python)
   __init__.py     sets up the REST view + Assist + forwards to the platforms below
@@ -140,8 +174,8 @@ custom_components/ha_alarmclock/   Home Assistant custom integration (Python)
    **Long-Lived Access Token**.
 4. In the Android app's Settings screen, enter your Home Assistant URL and that token,
    and enable sync. A device (with its alarms as switches and next-trigger sensors, its
-   timers as trigger-time/remaining-time sensor pairs, a ringing sensor, a device-wide
-   next-alarm sensor, and snooze/dismiss buttons) appears in HA the first time it pushes.
+   timers as trigger-time sensors, a ringing sensor, a device-wide next-alarm sensor,
+   and snooze/dismiss buttons) appears in HA the first time it pushes.
 
 Only one instance of the integration is needed even with multiple phones — each
 device that pushes to it shows up as its own HA device automatically. If more than one
@@ -196,10 +230,12 @@ beyond what's already here.
 
 ## Not yet implemented
 
-Stopwatch and world clock (this pass added timers; alarms, timers, widgets, a dynamic
-icon, and Assist integration are all in). The HA access token is stored in
-`EncryptedSharedPreferences`. The integration's device state lives in memory only —
-it's rebuilt from the phone's next push after a Home Assistant restart rather than
-persisted to disk. Timers aren't controllable *from* HA (only exposed as sensors) —
-only alarms have a switch entity and HA→phone commands; symmetric timer control
-(pause/resume/cancel from HA) would be a natural follow-up if wanted.
+A stopwatch (alarms, timers, widgets, a dynamic icon, a Clock tab with world clocks,
+and Assist integration are all in now). The HA access token is stored in
+`EncryptedSharedPreferences`; clock style, widget colors, and the world-clock list are
+in plain (unencrypted) SharedPreferences, since none of it is sensitive. The
+integration's device state lives in memory only — it's rebuilt from the phone's next
+push after a Home Assistant restart rather than persisted to disk. Timers aren't
+controllable *from* HA (only exposed as sensors) — only alarms have a switch entity
+and HA→phone commands; symmetric timer control (pause/resume/cancel from HA) would be
+a natural follow-up if wanted.

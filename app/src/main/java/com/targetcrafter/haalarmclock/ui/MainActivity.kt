@@ -11,6 +11,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Icon
@@ -32,12 +33,14 @@ import androidx.navigation.compose.rememberNavController
 import com.targetcrafter.haalarmclock.R
 import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.alarmlist.AlarmListScreen
+import com.targetcrafter.haalarmclock.ui.clock.ClockScreen
 import com.targetcrafter.haalarmclock.ui.settings.SettingsScreen
 import com.targetcrafter.haalarmclock.ui.theme.HaAlarmClockTheme
 import com.targetcrafter.haalarmclock.ui.timerlist.TimerListScreen
 
 private const val ROUTE_LIST = "list"
 private const val ROUTE_TIMERS = "timers"
+private const val ROUTE_CLOCK = "clock"
 private const val ROUTE_SETTINGS = "settings"
 
 class MainActivity : ComponentActivity() {
@@ -56,7 +59,7 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val currentDestination by navController.currentBackStackEntryAsState()
                 val showBottomBar = currentDestination?.destination?.hierarchy?.any {
-                    it.route == ROUTE_LIST || it.route == ROUTE_TIMERS
+                    it.route == ROUTE_LIST || it.route == ROUTE_TIMERS || it.route == ROUTE_CLOCK
                 } == true
 
                 Scaffold(
@@ -74,6 +77,12 @@ class MainActivity : ComponentActivity() {
                                     onClick = { navController.navigateToTab(ROUTE_TIMERS) },
                                     icon = { Icon(Icons.Filled.Timer, contentDescription = null) },
                                     label = { Text(stringResource(R.string.tab_timers)) },
+                                )
+                                NavigationBarItem(
+                                    selected = currentDestination?.destination?.hierarchy?.any { it.route == ROUTE_CLOCK } == true,
+                                    onClick = { navController.navigateToTab(ROUTE_CLOCK) },
+                                    icon = { Icon(Icons.Filled.AccessTime, contentDescription = null) },
+                                    label = { Text(stringResource(R.string.tab_clock)) },
                                 )
                             }
                         }
@@ -98,6 +107,9 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(ROUTE_TIMERS) {
                             TimerListScreen(onOpenSettings = { navController.navigate(ROUTE_SETTINGS) })
+                        }
+                        composable(ROUTE_CLOCK) {
+                            ClockScreen(onOpenSettings = { navController.navigate(ROUTE_SETTINGS) })
                         }
                         composable(ROUTE_SETTINGS) {
                             SettingsScreen(onBack = { navController.popBackStack() })

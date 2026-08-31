@@ -2,13 +2,21 @@ package com.targetcrafter.haalarmclock.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,8 +34,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,16 +51,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
-import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.data.AppDefaults
+import com.targetcrafter.haalarmclock.data.ClockStyle
+import com.targetcrafter.haalarmclock.data.WidgetAppearance
 import com.targetcrafter.haalarmclock.ha.HaConnectionState
 import com.targetcrafter.haalarmclock.ha.HaSettings
+import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.appViewModelFactory
+
+private val PRESET_COLORS = listOf(
+    0xFF2E2E2E.toInt(), // dark grey (default widget background)
+    0xFFE8E8E8.toInt(), // light grey (default widget foreground)
+    0xFF000000.toInt(),
+    0xFFFFFFFF.toInt(),
+    0xFF6B6B6B.toInt(),
+    0xFF1B1F3B.toInt(), // app's own navy
+    0xFFFFB84D.toInt(), // app's own amber
+    0xFFEF5350.toInt(),
+    0xFF66BB6A.toInt(),
+    0xFF42A5F5.toInt(),
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,17 +85,23 @@ fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val app = HaAlarmClockApp.from(context)
     val viewModel: SettingsViewModel = viewModel(
-        factory = appViewModelFactory { SettingsViewModel(app.haSettingsStore, app.appDefaultsStore, app.haWebSocketClient) },
+        factory = appViewModelFactory {
+            SettingsViewModel(app.haSettingsStore, app.appDefaultsStore, app.clockPreferencesStore, app.widgetAppearanceStore, app.haWebSocketClient)
+        },
     )
     val persisted by viewModel.settings.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     val persistedDefaults by viewModel.appDefaults.collectAsState()
+    val persistedClockStyle by viewModel.clockStyle.collectAsState()
+    val persistedWidgetAppearance by viewModel.widgetAppearance.collectAsState()
 
     var enabled by remember { mutableStateOf(persisted.enabled) }
     var baseUrl by remember { mutableStateOf(persisted.baseUrl) }
     var accessToken by remember { mutableStateOf(persisted.accessToken) }
     var defaultSnoozeMinutes by remember { mutableIntStateOf(persistedDefaults.snoozeMinutes) }
     var defaultFadeInSeconds by remember { mutableIntStateOf(persistedDefaults.fadeInSeconds) }
+    var clockStyle by remember { mutableStateOf(persistedClockStyle) }
+    var widgetAppearance by remember { mutableStateOf(persistedWidgetAppearance) }
 
     LaunchedEffect(Unit) {
         enabled = persisted.enabled
@@ -74,6 +109,8 @@ fun SettingsScreen(onBack: () -> Unit) {
         accessToken = persisted.accessToken
         defaultSnoozeMinutes = persistedDefaults.snoozeMinutes
         defaultFadeInSeconds = persistedDefaults.fadeInSeconds
+        clockStyle = persistedClockStyle
+        widgetAppearance = persistedWidgetAppearance
     }
 
     Scaffold(
@@ -114,6 +151,47 @@ fun SettingsScreen(onBack: () -> Unit) {
                 step = 5,
                 onValueChange = { defaultFadeInSeconds = it.coerceIn(5, 300) },
             )
+
+            HorizontalDivider()
+
+            Text("Clock", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Which style the Clock tab's local-time display uses.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                ClockStyle.entries.forEachIndexed { index, style ->
+                    SegmentedButton(
+                        selected = clockStyle == style,
+                        onClick = { clockStyle = style },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = ClockStyle.entries.size),
+                    ) {
+                        Text(if (style == ClockStyle.DIGITAL) "Digital" else "Analog")
+                    }
+                }
+            }
+
+            HorizontalDivider()
+
+            Text("Home screen widgets", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Colors for both the analog and digital clock widgets. Grayscale by default so " +
+                    "they fit most wallpapers/launchers.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            ColorPickerRow(
+                label = "Background",
+                colorArgb = widgetAppearance.backgroundColor,
+                onColorChange = { widgetAppearance = widgetAppearance.copy(backgroundColor = it) },
+            )
+            ColorPickerRow(
+                label = "Foreground (hands/text)",
+                colorArgb = widgetAppearance.foregroundColor,
+                onColorChange = { widgetAppearance = widgetAppearance.copy(foregroundColor = it) },
+            )
+            TextButton(onClick = { widgetAppearance = WidgetAppearance() }) {
+                Text("Reset to default (grayscale)")
+            }
 
             HorizontalDivider()
 
@@ -168,6 +246,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                             fadeInSeconds = defaultFadeInSeconds,
                         ),
                     )
+                    viewModel.saveClockStyle(clockStyle)
+                    viewModel.saveWidgetAppearance(widgetAppearance)
                     // The sync service only ever gets started when sync is configured (so its
                     // notification doesn't show otherwise); if the user just turned it on, start
                     // it now instead of waiting for the next app launch. A no-op if already running.
@@ -196,6 +276,54 @@ private fun SteppedValueRow(label: String, value: Int, unit: String, onValueChan
         },
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+@Composable
+private fun ColorPickerRow(label: String, colorArgb: Int, onColorChange: (Int) -> Unit) {
+    var hexInput by remember(colorArgb) { mutableStateOf(hexString(colorArgb)) }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(bottom = 8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            for (preset in PRESET_COLORS) {
+                val selected = preset == colorArgb
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(preset))
+                        .border(
+                            width = if (selected) 3.dp else 1.dp,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                            shape = CircleShape,
+                        )
+                        .clickable { onColorChange(preset) },
+                )
+            }
+        }
+        OutlinedTextField(
+            value = hexInput,
+            onValueChange = { text ->
+                hexInput = text
+                parseHexColor(text)?.let(onColorChange)
+            },
+            label = { Text("Hex") },
+            singleLine = true,
+            modifier = Modifier.width(160.dp).padding(top = 8.dp),
+        )
+    }
+}
+
+private fun hexString(colorArgb: Int): String = "#%06X".format(colorArgb and 0xFFFFFF)
+
+private fun parseHexColor(text: String): Int? {
+    val cleaned = text.removePrefix("#")
+    if (cleaned.length != 6) return null
+    val rgb = cleaned.toIntOrNull(16) ?: return null
+    return (0xFF shl 24) or rgb
 }
 
 private fun connectionStatusLabel(state: HaConnectionState): String = when (state) {

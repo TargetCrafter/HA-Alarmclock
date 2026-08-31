@@ -26,6 +26,7 @@
     <string name="timer_done">Done</string>
     <string name="tab_alarms">Alarms</string>
     <string name="tab_timers">Timers</string>
+    <string name="tab_clock">Clock</string>
     <string name="no_timers_yet">No timers yet. Tap + to add one.</string>
     <string name="add_timer">Add timer</string>
     <string name="start_timer">Start</string>

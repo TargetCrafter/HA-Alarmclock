@@ -15,21 +15,16 @@ import com.targetcrafter.haalarmclock.alarm.AlarmActions
 import com.targetcrafter.haalarmclock.alarm.RingingState
 import com.targetcrafter.haalarmclock.data.Alarm
 import com.targetcrafter.haalarmclock.data.Timer
-import com.targetcrafter.haalarmclock.data.TimerState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 private const val NOTIFICATION_ID = 1
 private const val INITIAL_BACKOFF_MILLIS = 2_000L
 private const val MAX_BACKOFF_MILLIS = 60_000L
-private const val RUNNING_TIMER_PUSH_INTERVAL_MILLIS = 15_000L
 
 private data class SyncInputs(val settings: HaSettings, val alarms: List<Alarm>, val ringing: Alarm?, val timers: List<Timer>)
 
@@ -65,32 +60,21 @@ class HaSyncService : LifecycleService() {
         }
 
         // Push current state to HA whenever settings, alarms, ringing state, or timers change —
-        // plus, while at least one timer is RUNNING, on a short interval so its "live" remaining
-        // value keeps advancing in HA without needing a separate polling mechanism on the HA side.
-        // (No such ticker runs while every timer is idle/paused/finished — the architecture stays
-        // push-based, not polling, the rest of the time.)
+        // purely push-based, no polling ticker (a timer's remaining time isn't exposed to HA at
+        // all; only its trigger_at timestamp is, which only changes on start/pause/resume anyway).
         lifecycleScope.launch {
-            val runningTimerTicker = app.timerRepository.timers.flatMapLatest { timers ->
-                if (timers.any { it.state == TimerState.RUNNING }) {
-                    flow { while (true) { emit(Unit); delay(RUNNING_TIMER_PUSH_INTERVAL_MILLIS) } }
-                } else {
-                    flowOf(Unit)
-                }
-            }
             combine(
                 app.haSettingsStore.settings,
                 app.repository.alarms,
                 RingingState.current,
                 app.timerRepository.timers,
-                runningTimerTicker,
-            ) { settings, alarms, ringing, timers, _ ->
-                SyncInputs(settings, alarms, ringing, timers)
-            }.collect { inputs ->
-                if (inputs.settings.isConfigured) {
-                    val payload = HaSyncPayload.build(app.deviceId, app.deviceName, inputs.alarms, inputs.ringing, inputs.timers)
-                    app.haApiClient.pushSync(inputs.settings.baseUrl, inputs.settings.accessToken, payload)
+            ) { settings, alarms, ringing, timers -> SyncInputs(settings, alarms, ringing, timers) }
+                .collect { inputs ->
+                    if (inputs.settings.isConfigured) {
+                        val payload = HaSyncPayload.build(app.deviceId, app.deviceName, inputs.alarms, inputs.ringing, inputs.timers)
+                        app.haApiClient.pushSync(inputs.settings.baseUrl, inputs.settings.accessToken, payload)
+                    }
                 }
-            }
         }
 
         // Maintain the command WebSocket, reconnecting with backoff on failure. collectLatest

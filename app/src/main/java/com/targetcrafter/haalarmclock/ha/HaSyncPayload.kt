@@ -63,14 +63,12 @@ object HaSyncPayload {
         }
 
         putJsonArray("timers") {
-            val now = System.currentTimeMillis()
             for (timer in timers) {
                 addJsonObject {
                     put("id", timer.id)
                     put("label", timer.label)
                     put("state", timer.state.name.lowercase())
                     put("duration_seconds", timer.durationMillis / 1000)
-                    put("remaining_seconds", timer.remainingMillisNow(now) / 1000)
                     if (timer.state == TimerState.RUNNING) {
                         timer.endAtMillis?.let { put("trigger_at", isoInstant(it)) }
                     }

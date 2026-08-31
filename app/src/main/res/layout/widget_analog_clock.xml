@@ -5,14 +5,15 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@drawable/widget_background"
     android:padding="12dp">
 
-    <AnalogClock
-        android:id="@+id/widget_analog_clock"
+    <ImageView
+        android:id="@+id/widget_analog_face"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter" />
 
     <TextView
         android:id="@+id/widget_next_alarm"
@@ -20,7 +21,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:textSize="12sp"
-        android:textColor="@color/widget_text_secondary"
         android:maxLines="1"
         android:ellipsize="end" />
 

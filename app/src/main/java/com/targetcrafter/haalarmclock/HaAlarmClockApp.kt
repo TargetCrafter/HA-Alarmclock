@@ -11,7 +11,10 @@ import com.targetcrafter.haalarmclock.alarm.AlarmScheduler
 import com.targetcrafter.haalarmclock.data.AlarmRepository
 import com.targetcrafter.haalarmclock.data.AppDatabase
 import com.targetcrafter.haalarmclock.data.AppDefaultsStore
+import com.targetcrafter.haalarmclock.data.ClockPreferencesStore
 import com.targetcrafter.haalarmclock.data.TimerRepository
+import com.targetcrafter.haalarmclock.data.WidgetAppearanceStore
+import com.targetcrafter.haalarmclock.data.WorldClockStore
 import com.targetcrafter.haalarmclock.ha.HaApiClient
 import com.targetcrafter.haalarmclock.ha.HaSettingsStore
 import com.targetcrafter.haalarmclock.ha.HaWebSocketClient
@@ -36,6 +39,9 @@ class HaAlarmClockApp : Application() {
     val scheduler: AlarmScheduler by lazy { AlarmScheduler(this) }
     val repository: AlarmRepository by lazy { AlarmRepository(AppDatabase.get(this).alarmDao(), scheduler) }
     val appDefaultsStore: AppDefaultsStore by lazy { AppDefaultsStore(this) }
+    val clockPreferencesStore: ClockPreferencesStore by lazy { ClockPreferencesStore(this) }
+    val widgetAppearanceStore: WidgetAppearanceStore by lazy { WidgetAppearanceStore(this) }
+    val worldClockStore: WorldClockStore by lazy { WorldClockStore(this) }
 
     val timerScheduler: TimerScheduler by lazy { TimerScheduler(this) }
     private val timerNotifications: TimerNotifications by lazy { TimerNotifications(this) }
@@ -65,10 +71,13 @@ class HaAlarmClockApp : Application() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
-        // Keeps home-screen clock widgets' "next alarm" line live even when HA sync is off and
-        // no other component is otherwise watching the alarms table.
+        // Keeps home-screen clock widgets' "next alarm" line and colors live even when HA sync is
+        // off and no other component is otherwise watching the alarms table.
         applicationScope.launch {
             repository.alarms.collect { ClockWidgetUpdater.updateAll(this@HaAlarmClockApp) }
+        }
+        applicationScope.launch {
+            widgetAppearanceStore.appearance.collect { ClockWidgetUpdater.updateAll(this@HaAlarmClockApp) }
         }
         applicationScope.launch { DynamicIconUpdater.applyNow(this@HaAlarmClockApp) }
         DynamicIconUpdater.schedulePeriodic(this)

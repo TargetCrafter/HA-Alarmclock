@@ -5,7 +5,6 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:background="@drawable/widget_background"
     android:padding="16dp">
 
     <TextClock
@@ -15,8 +14,7 @@
         android:format12Hour="h:mm"
         android:format24Hour="HH:mm"
         android:textSize="36sp"
-        android:textStyle="bold"
-        android:textColor="@color/widget_text" />
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/widget_next_alarm"
@@ -24,7 +22,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:textSize="13sp"
-        android:textColor="@color/widget_text_secondary"
         android:maxLines="1"
         android:ellipsize="end" />
 

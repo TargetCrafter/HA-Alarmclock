@@ -27,7 +27,6 @@ class TimerInfo:
     label: str
     state: str  # "running" | "paused" | "finished"
     duration_seconds: int
-    remaining_seconds: int
     trigger_at: str | None = None  # set only while state == "running"
 
 
@@ -97,7 +96,6 @@ class AlarmClockStore:
                 label=str(timer.get("label") or ""),
                 state=str(timer.get("state") or "running"),
                 duration_seconds=int(timer.get("duration_seconds") or 0),
-                remaining_seconds=int(timer.get("remaining_seconds") or 0),
                 trigger_at=timer.get("trigger_at"),
             )
             for timer in payload.get("timers", [])

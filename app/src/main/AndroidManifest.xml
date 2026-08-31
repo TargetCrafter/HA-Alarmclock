@@ -267,6 +267,10 @@
                 android:resource="@xml/widget_analog_clock_info" />
         </receiver>
 
+        <receiver
+            android:name=".widget.AnalogWidgetTickReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>
