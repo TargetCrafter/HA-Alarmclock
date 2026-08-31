@@ -1,6 +1,8 @@
 package com.targetcrafter.haalarmclock.ha
 
 import com.targetcrafter.haalarmclock.data.Alarm
+import com.targetcrafter.haalarmclock.data.Timer
+import com.targetcrafter.haalarmclock.data.TimerState
 import com.targetcrafter.haalarmclock.data.daysMaskLabel
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.addJsonObject
@@ -18,7 +20,13 @@ import java.time.format.DateTimeFormatter
  */
 object HaSyncPayload {
 
-    fun build(deviceId: String, deviceName: String, alarms: List<Alarm>, ringing: Alarm?): JsonObject = buildJsonObject {
+    fun build(
+        deviceId: String,
+        deviceName: String,
+        alarms: List<Alarm>,
+        ringing: Alarm?,
+        timers: List<Timer> = emptyList(),
+    ): JsonObject = buildJsonObject {
         put("device_id", deviceId)
         put("device_name", deviceName)
 
@@ -51,6 +59,22 @@ object HaSyncPayload {
                 put("alarm_id", ringing.id)
                 put("label", ringing.label)
                 put("time", "%02d:%02d".format(ringing.hour, ringing.minute))
+            }
+        }
+
+        putJsonArray("timers") {
+            val now = System.currentTimeMillis()
+            for (timer in timers) {
+                addJsonObject {
+                    put("id", timer.id)
+                    put("label", timer.label)
+                    put("state", timer.state.name.lowercase())
+                    put("duration_seconds", timer.durationMillis / 1000)
+                    put("remaining_seconds", timer.remainingMillisNow(now) / 1000)
+                    if (timer.state == TimerState.RUNNING) {
+                        timer.endAtMillis?.let { put("trigger_at", isoInstant(it)) }
+                    }
+                }
             }
         }
     }

@@ -1,0 +1,47 @@
+create_alarm:
+  name: Create alarm
+  description: >-
+    Creates a new alarm on a synced HA Alarm Clock phone (the app inserts it exactly as if you'd
+    tapped + in the app). Also reachable by voice via the built-in Assist pipeline — see
+    custom_sentences/en/ha_alarmclock.yaml — for sentences like "set an alarm for 7am".
+  fields:
+    device_id:
+      name: Phone
+      description: >-
+        Which synced phone to create the alarm on. Only needed if more than one phone has synced
+        to this integration; with just one, it's picked automatically.
+      required: false
+      example: haalarmclock_a1b2c3d4
+      selector:
+        text:
+    time:
+      name: Time
+      description: "The alarm time, e.g. '07:30', '7:30 am', or '19:30'."
+      required: true
+      example: "07:30"
+      selector:
+        text:
+    label:
+      name: Label
+      description: Optional name for the alarm.
+      required: false
+      example: Work
+      selector:
+        text:
+    repeat:
+      name: Repeat days
+      description: >-
+        Optional list of weekdays (mon/tue/wed/thu/fri/sat/sun) to repeat on. Omit for a one-off
+        alarm. Not settable by voice — use this field from an automation/script instead.
+      required: false
+      selector:
+        select:
+          multiple: true
+          options:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun

@@ -1,0 +1,13 @@
+language: "en"
+intents:
+  HaAlarmClockCreateAlarm:
+    data:
+      - sentences:
+          - "set an alarm for {ha_alarmclock_time}[ on my phone][ called {ha_alarmclock_label}]"
+          - "create an alarm (for|at) {ha_alarmclock_time}[ called {ha_alarmclock_label}]"
+          - "wake me up at {ha_alarmclock_time}[ for {ha_alarmclock_label}]"
+lists:
+  ha_alarmclock_time:
+    wildcard: true
+  ha_alarmclock_label:
+    wildcard: true

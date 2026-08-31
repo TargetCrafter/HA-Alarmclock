@@ -20,6 +20,7 @@ class BootReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 app.repository.rescheduleAll()
+                app.timerRepository.rescheduleAll()
             } finally {
                 pendingResult.finish()
             }

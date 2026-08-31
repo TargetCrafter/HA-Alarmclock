@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -117,7 +118,24 @@ private fun parseCommand(data: JsonObject): HaCommand? = when (data["command"]?.
     }
     "snooze" -> HaCommand.Snooze
     "dismiss" -> HaCommand.Dismiss
+    "create_alarm" -> parseCreateAlarm(data)
     else -> null
+}
+
+private val TIME_REGEX = Regex("""^(\d{1,2}):(\d{2})$""")
+private val REPEAT_DAY_BITS = listOf("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+private fun parseCreateAlarm(data: JsonObject): HaCommand? {
+    val time = data["time"]?.jsonPrimitive?.contentOrNull ?: return null
+    val match = TIME_REGEX.matchEntire(time) ?: return null
+    val (hour, minute) = match.destructured
+    val label = data["label"]?.jsonPrimitive?.contentOrNull ?: ""
+    val repeatDays = data["repeat_days"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
+    val repeatMask = repeatDays.fold(0) { mask, day ->
+        val bit = REPEAT_DAY_BITS.indexOf(day.lowercase())
+        if (bit >= 0) mask or (1 shl bit) else mask
+    }
+    return HaCommand.CreateAlarm(hour.toInt(), minute.toInt(), label, repeatMask)
 }
 
 private fun toWebSocketUrl(baseUrl: String): String {

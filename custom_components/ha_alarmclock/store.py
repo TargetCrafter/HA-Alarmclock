@@ -22,6 +22,16 @@ class AlarmInfo:
 
 
 @dataclass
+class TimerInfo:
+    id: int
+    label: str
+    state: str  # "running" | "paused" | "finished"
+    duration_seconds: int
+    remaining_seconds: int
+    trigger_at: str | None = None  # set only while state == "running"
+
+
+@dataclass
 class RingingInfo:
     active: bool = False
     alarm_id: int | None = None
@@ -41,12 +51,14 @@ class DeviceState:
     device_id: str
     device_name: str
     alarms: dict[int, AlarmInfo] = field(default_factory=dict)
+    timers: dict[int, TimerInfo] = field(default_factory=dict)
     ringing: RingingInfo = field(default_factory=RingingInfo)
     next_alarm: NextAlarmInfo = field(default_factory=NextAlarmInfo)
-    # slot -> alarm_id, for the currently-existing alarms. Slots are small, stable numbers
-    # (1, 2, 3, ...) that entities are keyed on instead of the app's own (ever-growing) alarm id,
-    # and get reused for the next new alarm once freed — see AlarmClockStore._reassign_slots.
+    # slot -> id, for whatever alarms/timers currently exist. Slots are small, stable numbers
+    # (1, 2, 3, ...) that entities are keyed on instead of the app's own (ever-growing) alarm/timer
+    # id, and get reused for the next new alarm/timer once freed — see AlarmClockStore._reassign_slots.
     alarm_slots: dict[int, int] = field(default_factory=dict)
+    timer_slots: dict[int, int] = field(default_factory=dict)
 
 
 class AlarmClockStore:
@@ -79,6 +91,19 @@ class AlarmClockStore:
             if "id" in alarm
         }
 
+        device.timers = {
+            int(timer["id"]): TimerInfo(
+                id=int(timer["id"]),
+                label=str(timer.get("label") or ""),
+                state=str(timer.get("state") or "running"),
+                duration_seconds=int(timer.get("duration_seconds") or 0),
+                remaining_seconds=int(timer.get("remaining_seconds") or 0),
+                trigger_at=timer.get("trigger_at"),
+            )
+            for timer in payload.get("timers", [])
+            if "id" in timer
+        }
+
         ringing = payload.get("ringing") or {}
         device.ringing = RingingInfo(
             active=bool(ringing.get("active", False)),
@@ -94,28 +119,28 @@ class AlarmClockStore:
             trigger_at=next_alarm.get("trigger_at"),
         )
 
-        self._reassign_slots(device)
+        self._reassign_slots(device.alarm_slots, set(device.alarms.keys()))
+        self._reassign_slots(device.timer_slots, set(device.timers.keys()))
 
         return device, is_new
 
     @staticmethod
-    def _reassign_slots(device: DeviceState) -> None:
-        """Keeps device.alarm_slots pointing at whatever alarms currently exist, reusing the
-        smallest free slot number for any alarm that doesn't have one yet. A slot's entities stay
-        registered in HA (as unavailable) when its alarm is deleted, ready to be picked up by the
-        next new alarm, rather than each new alarm ever created minting a fresh entity forever.
+    def _reassign_slots(slots: dict[int, int], current_ids: set[int]) -> None:
+        """Keeps `slots` (an alarm_slots or timer_slots map) pointing at whatever ids currently
+        exist, reusing the smallest free slot number for any id that doesn't have one yet. A
+        slot's entities stay registered in HA (as unavailable) when its alarm/timer is deleted,
+        ready to be picked up by the next new one, rather than each one ever created minting a
+        fresh entity forever.
         """
-        current_ids = set(device.alarms.keys())
+        for slot, entity_id in list(slots.items()):
+            if entity_id not in current_ids:
+                del slots[slot]
 
-        for slot, alarm_id in list(device.alarm_slots.items()):
-            if alarm_id not in current_ids:
-                del device.alarm_slots[slot]
-
-        assigned_ids = set(device.alarm_slots.values())
-        used_slots = set(device.alarm_slots.keys())
+        assigned_ids = set(slots.values())
+        used_slots = set(slots.keys())
         next_slot = 1
-        for alarm_id in sorted(current_ids - assigned_ids):
+        for entity_id in sorted(current_ids - assigned_ids):
             while next_slot in used_slots:
                 next_slot += 1
-            device.alarm_slots[next_slot] = alarm_id
+            slots[next_slot] = entity_id
             used_slots.add(next_slot)

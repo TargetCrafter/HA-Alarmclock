@@ -1,13 +1,17 @@
-"""Next-alarm timestamp sensors: one device-wide "soonest of all alarms" sensor per phone, plus
-one per-alarm-slot sensor reused across the alarms that occupy that slot over time (see
-AlarmClockStore._reassign_slots), mirroring the entity-reuse pattern used by switch.py.
+"""Timestamp/duration sensors for alarms and timers.
+
+One device-wide "soonest of all alarms" sensor per phone, plus one per-alarm-slot trigger-time
+sensor and one pair of per-timer-slot sensors (trigger time + live remaining value), all reused
+across whatever currently occupies that slot over time (see AlarmClockStore._reassign_slots),
+mirroring the entity-reuse pattern used by switch.py.
 """
 from __future__ import annotations
 
 import datetime as dt
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -15,13 +19,14 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, signal_update
 from .device import build_device_info
-from .store import AlarmClockStore, AlarmInfo
+from .store import AlarmClockStore, AlarmInfo, TimerInfo
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     store: AlarmClockStore = hass.data[DOMAIN][entry.entry_id]
     added_devices: set[str] = set()
-    slot_entities: dict[tuple[str, int], AlarmNextTriggerSensor] = {}
+    alarm_slot_entities: dict[tuple[str, int], AlarmNextTriggerSensor] = {}
+    timer_slot_entities: dict[tuple[str, int], SensorEntity] = {}
 
     @callback
     def _sync(device_id: str) -> None:
@@ -36,15 +41,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
         for slot in device.alarm_slots:
             key = (device_id, slot)
-            if key not in slot_entities:
+            if key not in alarm_slot_entities:
                 entity = AlarmNextTriggerSensor(store, entry.entry_id, device_id, slot)
-                slot_entities[key] = entity
+                alarm_slot_entities[key] = entity
                 new_entities.append(entity)
+
+        for slot in device.timer_slots:
+            key = (device_id, slot)
+            if key not in timer_slot_entities:
+                trigger_entity = TimerTriggerSensor(store, entry.entry_id, device_id, slot)
+                remaining_entity = TimerRemainingSensor(store, entry.entry_id, device_id, slot)
+                timer_slot_entities[key] = trigger_entity
+                new_entities.extend([trigger_entity, remaining_entity])
 
         if new_entities:
             async_add_entities(new_entities)
-        # As with AlarmSwitch, a slot whose alarm was deleted is never removed here — its sensor
-        # just goes unavailable and is picked back up when a new alarm claims that slot number.
+        # As with AlarmSwitch, a slot whose alarm/timer was deleted is never removed here — its
+        # sensors just go unavailable and are picked back up when a new one claims that slot.
 
     entry.async_on_unload(async_dispatcher_connect(hass, signal_update(entry.entry_id), _sync))
     for device_id in store.devices:
@@ -159,4 +172,115 @@ class AlarmNextTriggerSensor(SensorEntity):
             "repeat": alarm.repeat,
             "enabled": alarm.enabled,
             "snoozed_until": alarm.snoozed_until,
+        }
+
+
+class _TimerSlotSensor(SensorEntity):
+    """Shared slot lookup for the two per-timer sensors below."""
+
+    _attr_has_entity_name = False
+    _attr_icon = "mdi:timer-outline"
+    _attr_should_poll = False
+
+    def __init__(self, store: AlarmClockStore, entry_id: str, device_id: str, slot: int) -> None:
+        self._store = store
+        self._entry_id = entry_id
+        self._device_id = device_id
+        self._slot = slot
+        self._attr_device_info = build_device_info(store, device_id)
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, signal_update(self._entry_id), self._handle_signal),
+        )
+
+    @callback
+    def _handle_signal(self, device_id: str) -> None:
+        if device_id == self._device_id:
+            self.async_write_ha_state()
+
+    def _timer(self) -> TimerInfo | None:
+        device = self._store.devices.get(self._device_id)
+        if device is None:
+            return None
+        timer_id = device.timer_slots.get(self._slot)
+        if timer_id is None:
+            return None
+        return device.timers.get(timer_id)
+
+    @property
+    def available(self) -> bool:
+        return self._timer() is not None
+
+    def _label(self, timer: TimerInfo) -> str:
+        return timer.label or "Timer"
+
+
+class TimerTriggerSensor(_TimerSlotSensor):
+    """The absolute finish time of whichever timer currently occupies this slot — set only while
+    it's actually running (paused/finished timers have no trigger time), matching the same
+    timestamp-sensor shape as AlarmNextTriggerSensor.
+    """
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, store: AlarmClockStore, entry_id: str, device_id: str, slot: int) -> None:
+        super().__init__(store, entry_id, device_id, slot)
+        self._attr_unique_id = f"{device_id}_timer_{slot}_trigger"
+
+    @property
+    def name(self) -> str | None:
+        timer = self._timer()
+        return None if timer is None else f"{self._label(timer)} trigger"
+
+    @property
+    def native_value(self) -> dt.datetime | None:
+        timer = self._timer()
+        if timer is None or not timer.trigger_at:
+            return None
+        return dt_util.parse_datetime(timer.trigger_at)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        timer = self._timer()
+        if timer is None:
+            return {}
+        return {"timer_id": timer.id, "label": timer.label, "state": timer.state}
+
+
+class TimerRemainingSensor(_TimerSlotSensor):
+    """The "live" side of a timer: how much time is left, as pushed by the phone. Updated on
+    every state change (start/pause/resume/cancel/finish) and, while running, on a short interval
+    from the phone (see HaSyncService) — not polled from the HA side, consistent with the rest of
+    this local_push integration.
+    """
+
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+
+    def __init__(self, store: AlarmClockStore, entry_id: str, device_id: str, slot: int) -> None:
+        super().__init__(store, entry_id, device_id, slot)
+        self._attr_unique_id = f"{device_id}_timer_{slot}_remaining"
+
+    @property
+    def name(self) -> str | None:
+        timer = self._timer()
+        return None if timer is None else f"{self._label(timer)} remaining"
+
+    @property
+    def native_value(self) -> int | None:
+        timer = self._timer()
+        return None if timer is None else timer.remaining_seconds
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        timer = self._timer()
+        if timer is None:
+            return {}
+        return {
+            "timer_id": timer.id,
+            "label": timer.label,
+            "state": timer.state,
+            "duration_seconds": timer.duration_seconds,
         }

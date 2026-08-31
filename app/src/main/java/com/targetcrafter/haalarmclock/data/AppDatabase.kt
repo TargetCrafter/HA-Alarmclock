@@ -4,12 +4,15 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Alarm::class], version = 3, exportSchema = true)
+@Database(entities = [Alarm::class, Timer::class], version = 4, exportSchema = true)
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun alarmDao(): AlarmDao
+    abstract fun timerDao(): TimerDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -61,12 +64,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE timers (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        label TEXT NOT NULL,
+                        durationMillis INTEGER NOT NULL,
+                        state TEXT NOT NULL,
+                        endAtMillis INTEGER,
+                        remainingMillis INTEGER,
+                        createdAtMillis INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "ha-alarmclock.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
     }
 }

@@ -11,4 +11,26 @@
     <string name="snooze">Snooze</string>
     <string name="dismiss">Dismiss</string>
     <string name="snoozed_until">Snoozed until %1$s</string>
+    <string name="widget_digital_clock_label">Digital clock</string>
+    <string name="widget_analog_clock_label">Analog clock</string>
+    <string name="widget_next_alarm">Next: %1$s</string>
+    <string name="widget_no_alarm">No alarm set</string>
+
+    <string name="notification_channel_timer">Timers</string>
+    <string name="timer_default_label">Timer</string>
+    <string name="timer_pause">Pause</string>
+    <string name="timer_resume">Resume</string>
+    <string name="timer_cancel">Cancel</string>
+    <string name="timer_paused_at">Paused at %1$s</string>
+    <string name="timer_finished_title">%1$s finished</string>
+    <string name="timer_done">Done</string>
+    <string name="tab_alarms">Alarms</string>
+    <string name="tab_timers">Timers</string>
+    <string name="no_timers_yet">No timers yet. Tap + to add one.</string>
+    <string name="add_timer">Add timer</string>
+    <string name="start_timer">Start</string>
+    <string name="timer_label_hint">Timer name (optional)</string>
+    <string name="timer_hours">h</string>
+    <string name="timer_minutes">m</string>
+    <string name="timer_seconds">s</string>
 </resources>

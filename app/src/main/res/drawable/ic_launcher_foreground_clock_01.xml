@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto-generated dynamic-icon variant: hour hand fixed at the 1 o'clock position (see
+     DynamicIconUpdater, which enables the activity-alias matching the current hour). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFB84D"
+        android:pathData="M54,26a28,28 0,1 0,0.1 0zM54,32a22,22 0,1 1,-0.1 0z" />
+    <path
+        android:fillColor="#FFB84D"
+        android:pathData="M28,22l10,10 -5,5 -10,-10z" />
+    <path
+        android:fillColor="#FFB84D"
+        android:pathData="M80,22l-10,10 5,5 10,-10z" />
+    <group android:pivotX="54" android:pivotY="54" android:rotation="0">
+        <path android:fillColor="#FFB84D" android:pathData="M53,54 L53,30 L55,30 L55,54 Z" />
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="30">
+        <path android:fillColor="#FFB84D" android:pathData="M52,54 L52,38 L56,38 L56,54 Z" />
+    </group>
+    <path
+        android:fillColor="#1B1F3B"
+        android:pathData="M54,51a3,3 0,1 0,0.1 0z" />
+</vector>

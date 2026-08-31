@@ -11,21 +11,37 @@ import com.targetcrafter.haalarmclock.alarm.AlarmScheduler
 import com.targetcrafter.haalarmclock.data.AlarmRepository
 import com.targetcrafter.haalarmclock.data.AppDatabase
 import com.targetcrafter.haalarmclock.data.AppDefaultsStore
+import com.targetcrafter.haalarmclock.data.TimerRepository
 import com.targetcrafter.haalarmclock.ha.HaApiClient
 import com.targetcrafter.haalarmclock.ha.HaSettingsStore
 import com.targetcrafter.haalarmclock.ha.HaWebSocketClient
+import com.targetcrafter.haalarmclock.icon.DynamicIconUpdater
+import com.targetcrafter.haalarmclock.timer.TimerNotifications
+import com.targetcrafter.haalarmclock.timer.TimerScheduler
+import com.targetcrafter.haalarmclock.widget.ClockWidgetUpdater
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 const val NOTIFICATION_CHANNEL_ALARM = "alarm_ringing"
 const val NOTIFICATION_CHANNEL_SYNC = "ha_sync"
 const val NOTIFICATION_CHANNEL_UPCOMING = "upcoming_alarm"
+const val NOTIFICATION_CHANNEL_TIMER = "timer"
 
 class HaAlarmClockApp : Application() {
 
     val scheduler: AlarmScheduler by lazy { AlarmScheduler(this) }
     val repository: AlarmRepository by lazy { AlarmRepository(AppDatabase.get(this).alarmDao(), scheduler) }
     val appDefaultsStore: AppDefaultsStore by lazy { AppDefaultsStore(this) }
+
+    val timerScheduler: TimerScheduler by lazy { TimerScheduler(this) }
+    private val timerNotifications: TimerNotifications by lazy { TimerNotifications(this) }
+    val timerRepository: TimerRepository by lazy {
+        TimerRepository(AppDatabase.get(this).timerDao(), timerScheduler, timerNotifications)
+    }
 
     // Shared per OkHttp's own recommendation (connection pooling); the ping interval lets the
     // WebSocket detect a dead connection instead of waiting on a TCP-level timeout.
@@ -44,9 +60,18 @@ class HaAlarmClockApp : Application() {
     }
     val deviceName: String by lazy { "${Build.MANUFACTURER} ${Build.MODEL} Alarm Clock".trim() }
 
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        // Keeps home-screen clock widgets' "next alarm" line live even when HA sync is off and
+        // no other component is otherwise watching the alarms table.
+        applicationScope.launch {
+            repository.alarms.collect { ClockWidgetUpdater.updateAll(this@HaAlarmClockApp) }
+        }
+        applicationScope.launch { DynamicIconUpdater.applyNow(this@HaAlarmClockApp) }
+        DynamicIconUpdater.schedulePeriodic(this)
     }
 
     private fun createNotificationChannels() {
@@ -72,6 +97,13 @@ class HaAlarmClockApp : Application() {
                 getString(R.string.notification_channel_upcoming_alarm),
                 NotificationManager.IMPORTANCE_DEFAULT,
             ),
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                NOTIFICATION_CHANNEL_TIMER,
+                getString(R.string.notification_channel_timer),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply { setBypassDnd(true) },
         )
     }
 
