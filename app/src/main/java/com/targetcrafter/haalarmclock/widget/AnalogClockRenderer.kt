@@ -38,7 +38,7 @@ object AnalogClockRenderer {
         val radius = RENDER_SIZE_PX / 2f * 0.92f
 
         if (backgroundCircleColor != null) {
-            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = backgroundCircleColor; style = Paint.Style.FILL }
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = backgroundCircleColor; style = Paint.Style.FILL }
             canvas.drawCircle(cx, cy, RENDER_SIZE_PX / 2f * 0.98f, bgPaint)
         }
 
