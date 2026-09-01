@@ -47,7 +47,7 @@ object ClockWidgetUpdater {
         val analogTime = next?.let { formatTimeOnly(it) }
         val now = LocalTime.now()
         val face = AnalogClockRenderer.render(
-            now.hour, now.minute, now.second,
+            context, now.hour, now.minute, now.second,
             appearance.foregroundColor, appearance.backgroundColor, analogTime,
         )
         updateAnalogWidgets(context, manager, appearance, face, AnalogClockWidgetProvider::class.java, applyBackground = true)

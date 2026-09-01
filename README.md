@@ -56,10 +56,17 @@ alarm for you).
     conversation agent) and ships `custom_sentences/en/ha_alarmclock.yaml` so the
     built-in keyword-based Assist pipeline understands sentences like *"set an alarm for
     7am"* or *"wake me up at 6:30 for gym"* out of the box — no LLM required. Either
-    path fires the same `create_alarm` command over the WebSocket channel, and the
-    phone inserts a brand-new alarm exactly as if you'd tapped + in the app. Repeat days
-    are only settable via the service's `repeat` field (voice only ever creates a
-    one-off alarm — free-form day parsing from speech was judged too fragile to ship).
+    path fires the same `create_alarm` command over the WebSocket channel, and the phone
+    handles it in `HaSyncService`'s command collector. Repeat days are only settable via
+    the service's `repeat` field (voice only ever creates a one-off alarm — free-form day
+    parsing from speech was judged too fragile to ship).
+    **A request with no label (the common case — plain "set an alarm for 7am" never sets
+    one) updates the most recently created still-unnamed alarm's time/repeat instead of
+    inserting a new one each time**, so repeatedly asking Assist to set an alarm doesn't
+    pile up a new entity every time — it just keeps moving the same "unnamed" alarm
+    around. A request *with* a label always creates a fresh alarm, and existing labeled
+    alarms are never touched by this at all — only ever the label-less ones compete for
+    reuse with each other.
 
 ## UI/UX notes
 
@@ -110,7 +117,10 @@ alarm for you).
   options sheet (label, repeat days, vibrate, fade-in, ringtone, snooze duration),
   which opens as a tall bottom sheet with an always-visible floating Save button rather
   than a scrolling screen. Timers get a similarly lightweight add dialog (H/M/S
-  steppers + an optional name).
+  steppers + an optional name). Each timer row's own Pause/Resume/Cancel/Dismiss are
+  full-width, 96dp-tall buttons (`TimerActionButton` in `TimerListScreen.kt`) — the same
+  height as the fullscreen ringing screen's Dismiss/Snooze — so they're easy to hit by
+  feel, not just when awake enough to aim at a small target.
 - **Fade-in is on by default.** Alarms ramp from near-silent to full volume over the
   first 45 seconds; toggle it per-alarm in the options sheet.
 - **A snoozed alarm shows a "Snoozed until HH:MM" badge** on its row until it rings
@@ -139,22 +149,27 @@ alarm for you).
   rendered blank in practice (and, being a fixed system drawable, couldn't be
   recolored anyway) — it's now a full "watch face" drawn to a `Bitmap` by hand
   (`AnalogClockRenderer`) and pushed via `RemoteViews.setImageViewBitmap`: a filled disc
-  in the background color with a subtle bezel ring, twelve uniform dimmed tick marks
-  (`foreground` at ~55% alpha), white hour/minute hands, and **a red second hand with a
-  two-tone white-halo/red-center pivot dot** — `ANALOG_CLOCK_SECOND_HAND_COLOR` (Compose)
-  and `AnalogClockRenderer`'s `SECOND_HAND_COLOR` share the same `#E53935` so the app and
-  widget match. This is drawn identically for both the opaque and transparent variant —
-  the disc itself supplies the "face" either way, so the only difference is whether the
-  *surrounding* widget rectangle also gets `appearance.backgroundColor` (opaque) or stays
-  transparent (so only the circle shows against the wallpaper).
-- **When there's a next alarm, a centered badge — an alarm-bell glyph plus its bare
-  `HH:mm` (no "Next:" prefix or label; the glyph already says "alarm") — sits just below
-  the pivot,** backed by an opaque patch in the same background color as the disc,
-  painted *after* the hands so any hand passing behind the badge is cleanly masked out
-  rather than a line poking through between the glyphs. No badge is drawn at all when
-  there's no next alarm. The digital widgets keep their own separate next-alarm text row
-  underneath the time (still `Next: <label> · HH:mm`, hidden when there's no alarm) —
-  only the analog badge was redesigned to sit centered-and-masked into the face.
+  in the background color, right out to the bitmap's own edge (no ImageView padding
+  either — see `widget_analog_clock.xml`) so the face fills the whole widget, with a
+  subtle bezel ring; twelve dimmed tick marks (`foreground` at ~55% alpha) close to the
+  rim, the four quarter ticks (12/3/6/9) drawn longer than the other eight so the face
+  reads at a glance without numerals; white hour/minute hands; and **a red second hand
+  with a two-tone white-halo/red-center pivot dot** — `ANALOG_CLOCK_SECOND_HAND_COLOR`
+  (Compose) and `AnalogClockRenderer`'s `SECOND_HAND_COLOR` share the same `#E53935` so
+  the app and widget match. This is drawn identically for both the opaque and transparent
+  variant — the disc itself supplies the "face" either way, so the only difference is
+  whether the *surrounding* widget rectangle also gets `appearance.backgroundColor`
+  (opaque) or stays transparent (so only the circle shows against the wallpaper).
+- **When there's a next alarm, a centered badge — the Material "alarm" glyph (rasterized
+  from `R.drawable.ic_alarm_glyph` and tinted at runtime, the one non-Canvas-primitive
+  element in the renderer) plus its bare `HH:mm` (no "Next:" prefix or label; the glyph
+  already says "alarm") — sits just below the pivot,** backed by an opaque patch in the
+  same background color as the disc, painted *after* the hands so any hand passing behind
+  the badge is cleanly masked out rather than a line poking through between the glyphs.
+  No badge is drawn at all when there's no next alarm. The digital widgets keep their own
+  separate next-alarm text row underneath the time (still `Next: <label> · HH:mm`, hidden
+  when there's no alarm) — only the analog badge was redesigned to sit
+  centered-and-masked into the face.
 - **Redrawing it every second — so the second hand actually moves — needs a foreground
   service (`AnalogWidgetTickerService`), not just `AlarmManager`.** An `AlarmManager`
   trigger (even the Doze-surviving `setExactAndAllowWhileIdle`) is what the first version

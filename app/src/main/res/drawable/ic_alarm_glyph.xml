@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The standard Material Design "alarm" glyph, used by AnalogClockRenderer for the widget's
+     next-alarm badge (rasterized onto the Canvas with a runtime tint, not shown via this
+     drawable directly). Same path already used for the app's launcher icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M 9.103,3.476 C 5.3737311,-1.111071 -1.111071,5.3737311 3.476,9.103 3.1596445,10.036056 2.9988335,11.014773 3,12 c 0,2.215 0.8,4.244 2.128,5.812 L 3.22,19.72 c -0.7578912,0.70621 0.3537896,1.817891 1.06,1.06 L 6.188,18.872 C 7.8112366,20.248879 9.8714602,21.003207 12,21 c 2.215,0 4.244,-0.8 5.812,-2.128 l 1.908,1.908 c 0.70621,0.757891 1.817891,-0.35379 1.06,-1.06 L 18.872,17.812 C 20.248879,16.188763 21.003207,14.12854 21,12 21.001185,11.014771 20.840373,10.036051 20.524,9.103 25.111071,5.3737311 18.626269,-1.111071 14.897,3.476 13.96394,3.1596622 12.985226,2.9988517 12,3 11.014773,2.9988335 10.036056,3.1596445 9.103,3.476 Z" />
+</vector>

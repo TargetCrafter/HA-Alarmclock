@@ -109,14 +109,39 @@ class HaSyncService : LifecycleService() {
                     is HaCommand.SetAlarmEnabled -> app.repository.setEnabled(command.alarmId, command.enabled)
                     HaCommand.Snooze -> AlarmActions.snooze(this@HaSyncService)
                     HaCommand.Dismiss -> AlarmActions.dismiss(this@HaSyncService)
-                    is HaCommand.CreateAlarm -> app.repository.save(
-                        Alarm(
-                            hour = command.hour,
-                            minute = command.minute,
-                            label = command.label,
-                            repeatDaysMask = command.repeatDaysMask,
-                        ),
-                    )
+                    is HaCommand.CreateAlarm -> {
+                        // A blank label (e.g. from a plain "set an alarm for 7am" Assist command,
+                        // which never sets one) reuses the most recently created still-unnamed
+                        // alarm instead of piling up a new one every time — repeated voice
+                        // requests just keep moving the same "unnamed" alarm's time. A labeled
+                        // request always creates fresh, and existing labeled alarms are never
+                        // touched by this at all.
+                        val existingUnnamed = if (command.label.isBlank()) {
+                            app.repository.alarms.first().filter { it.label.isBlank() }.maxByOrNull { it.id }
+                        } else {
+                            null
+                        }
+                        if (existingUnnamed != null) {
+                            app.repository.save(
+                                existingUnnamed.copy(
+                                    hour = command.hour,
+                                    minute = command.minute,
+                                    repeatDaysMask = command.repeatDaysMask,
+                                    enabled = true,
+                                    snoozedUntilMillis = null,
+                                ),
+                            )
+                        } else {
+                            app.repository.save(
+                                Alarm(
+                                    hour = command.hour,
+                                    minute = command.minute,
+                                    label = command.label,
+                                    repeatDaysMask = command.repeatDaysMask,
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
