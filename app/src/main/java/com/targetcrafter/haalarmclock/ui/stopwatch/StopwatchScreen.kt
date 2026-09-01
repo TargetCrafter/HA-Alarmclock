@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Pause
@@ -23,6 +24,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -66,14 +68,15 @@ fun StopwatchScreen() {
                     )
                 }
             } else {
-                // reverseLayout, not a data re-sort: laps is already newest-first (index 0 is the
-                // latest), and LazyColumn auto-adjusts scroll to keep whatever was already visible
-                // in view when new items are inserted above it — with a plain top-down list that
-                // pins Lap 1 in place forever as new laps get prepended above it. reverseLayout
-                // flips which end is the default-visible anchor, so newest-first data renders
-                // oldest-at-top/newest-at-bottom and each new lap lands right in the anchored,
-                // already-visible spot instead.
-                LazyColumn(modifier = Modifier.fillMaxSize(), reverseLayout = true) {
+                val listState = rememberLazyListState()
+                // laps is newest-first (index 0 is the latest), so scrolling to index 0 shows the
+                // newest lap — done explicitly and unconditionally on every change rather than
+                // relying on LazyColumn's own default scroll-anchoring, which (with or without
+                // reverseLayout) turned out not to reliably keep the latest lap in view on its own.
+                LaunchedEffect(laps) {
+                    listState.scrollToItem(0)
+                }
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(laps, key = { it.number }) { lap ->
                         ListItem(
                             headlineContent = { Text("Lap ${lap.number}") },

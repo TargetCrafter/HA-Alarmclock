@@ -113,12 +113,11 @@ alarm for you).
   meaning with state — Lap while running, Reset once paused (disabled at a fresh
   `00:00.000`, since there's nothing to reset yet). Laps are stored newest-first (a new
   one is prepended in `StopwatchViewModel`), each showing both its own split and the
-  cumulative total at that point; the `LazyColumn` renders them with
-  `reverseLayout = true`, so the latest lap sits at the bottom of the list and is always
-  the one in view without scrolling — a plain top-down list would instead auto-adjust
-  scroll to keep whatever was already visible (Lap 1) pinned in place forever as new laps
-  get prepended above it, which is a documented Compose `LazyColumn` behavior, not a bug
-  in how the laps were sorted. `StopwatchViewModel` times off
+  cumulative total at that point. The lap `LazyColumn` explicitly scrolls to index 0 (the
+  newest lap) in a `LaunchedEffect(laps)` every time the list changes, rather than
+  depending on the list's own default scroll-anchoring to keep the latest lap in view —
+  that turned out not to be reliable on its own (tried first, still left Lap 1 pinned in
+  view), so it's driven imperatively instead. `StopwatchViewModel` times off
   `SystemClock.elapsedRealtime()` rather than `System.currentTimeMillis()`, so it can't
   jump if the wall clock changes mid-run (NTP
   sync, timezone, DST, the user editing the time). It's a plain `ViewModel`, not backed
