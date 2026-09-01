@@ -15,21 +15,30 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -52,10 +61,15 @@ private const val ROUTE_TABS = "tabs"
 private const val ROUTE_SETTINGS = "settings"
 
 /** Clock first, per the reordering the user asked for. */
-private enum class Tab(val labelRes: Int, val filledIcon: ImageVector, val outlinedIcon: ImageVector) {
-    CLOCK(R.string.tab_clock, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
-    ALARMS(R.string.tab_alarms, Icons.Filled.Alarm, Icons.Outlined.Alarm),
-    TIMERS(R.string.tab_timers, Icons.Filled.Timer, Icons.Outlined.Timer),
+private enum class Tab(
+    val labelRes: Int,
+    val addLabelRes: Int,
+    val filledIcon: ImageVector,
+    val outlinedIcon: ImageVector,
+) {
+    CLOCK(R.string.tab_clock, R.string.add_timezone, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
+    ALARMS(R.string.tab_alarms, R.string.add_alarm, Icons.Filled.Alarm, Icons.Outlined.Alarm),
+    TIMERS(R.string.tab_timers, R.string.add_timer, Icons.Filled.Timer, Icons.Outlined.Timer),
 }
 
 class MainActivity : ComponentActivity() {
@@ -105,12 +119,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TabsScreen(onOpenSettings: () -> Unit) {
     val app = HaAlarmClockApp.from(LocalContext.current)
     val savedTabIndex by app.tabPreferencesStore.lastTabIndex.collectAsState()
     val pagerState = rememberPagerState(initialPage = savedTabIndex.coerceIn(0, Tab.entries.size - 1)) { Tab.entries.size }
     val scope = rememberCoroutineScope()
+    val currentTab = Tab.entries[pagerState.currentPage]
+
+    // Which page's add-sheet is open, keyed by page index rather than a plain boolean, so a swipe
+    // away from the tab that opened it can't leak "show add" into whichever page lands under it.
+    var pendingAddPage by remember { mutableStateOf<Int?>(null) }
 
     // Persists the tab the user ends up on, whether they got there by swiping or tapping the
     // bottom nav, so the app reopens on it next time instead of always defaulting to Clock.
@@ -119,6 +139,17 @@ private fun TabsScreen(onOpenSettings: () -> Unit) {
     }
 
     Scaffold(
+        topBar = {
+            // Shared, non-swiping chrome: only the title text tracks the current page.
+            TopAppBar(
+                title = { Text(stringResource(currentTab.labelRes)) },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.settings))
+                    }
+                },
+            )
+        },
         bottomBar = {
             NavigationBar {
                 Tab.entries.forEachIndexed { index, tab ->
@@ -132,15 +163,32 @@ private fun TabsScreen(onOpenSettings: () -> Unit) {
                 }
             }
         },
+        floatingActionButton = {
+            // Also shared and fixed in place; only its label tracks the current page.
+            ExtendedFloatingActionButton(
+                onClick = { pendingAddPage = pagerState.currentPage },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text(stringResource(currentTab.addLabelRes)) },
+            )
+        },
     ) { innerPadding ->
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.padding(innerPadding).fillMaxSize(),
         ) { page ->
             when (Tab.entries[page]) {
-                Tab.CLOCK -> ClockScreen(onOpenSettings = onOpenSettings)
-                Tab.ALARMS -> AlarmListScreen(onOpenSettings = onOpenSettings)
-                Tab.TIMERS -> TimerListScreen(onOpenSettings = onOpenSettings)
+                Tab.CLOCK -> ClockScreen(
+                    showAddDialog = pendingAddPage == page,
+                    onAddDialogDismiss = { pendingAddPage = null },
+                )
+                Tab.ALARMS -> AlarmListScreen(
+                    showAddSheet = pendingAddPage == page,
+                    onAddSheetDismiss = { pendingAddPage = null },
+                )
+                Tab.TIMERS -> TimerListScreen(
+                    showAddDialog = pendingAddPage == page,
+                    onAddDialogDismiss = { pendingAddPage = null },
+                )
             }
         }
     }

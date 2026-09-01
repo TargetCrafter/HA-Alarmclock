@@ -10,19 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -47,9 +38,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AlarmListScreen(onOpenSettings: () -> Unit) {
+fun AlarmListScreen(showAddSheet: Boolean, onAddSheetDismiss: () -> Unit) {
     val app = HaAlarmClockApp.from(LocalContext.current)
     val viewModel: AlarmListViewModel = viewModel(
         factory = appViewModelFactory { AlarmListViewModel(app.repository) },
@@ -58,43 +48,24 @@ fun AlarmListScreen(onOpenSettings: () -> Unit) {
 
     var quickTimeAlarm by remember { mutableStateOf<Alarm?>(null) }
     var editSheetAlarmId by remember { mutableStateOf<Long?>(null) }
-    var showNewAlarmSheet by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Alarms") },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            LargeFloatingActionButton(onClick = { showNewAlarmSheet = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add alarm", modifier = Modifier.scale(1.3f))
-            }
-        },
-    ) { padding ->
-        if (alarms.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text("No alarms yet. Tap + to add one.", style = MaterialTheme.typography.bodyLarge)
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-                items(alarms, key = { it.id }) { alarm ->
-                    AlarmRow(
-                        alarm = alarm,
-                        onToggle = { enabled -> viewModel.setEnabled(alarm, enabled) },
-                        onTimeClick = { quickTimeAlarm = alarm },
-                        onDetailsClick = { editSheetAlarmId = alarm.id },
-                    )
-                }
+    if (alarms.isEmpty()) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text("No alarms yet. Tap + to add one.", style = MaterialTheme.typography.bodyLarge)
+        }
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(alarms, key = { it.id }) { alarm ->
+                AlarmRow(
+                    alarm = alarm,
+                    onToggle = { enabled -> viewModel.setEnabled(alarm, enabled) },
+                    onTimeClick = { quickTimeAlarm = alarm },
+                    onDetailsClick = { editSheetAlarmId = alarm.id },
+                )
             }
         }
     }
@@ -118,8 +89,8 @@ fun AlarmListScreen(onOpenSettings: () -> Unit) {
     if (editSheetAlarmId != null) {
         AlarmEditSheet(alarmId = editSheetAlarmId, onDismiss = { editSheetAlarmId = null })
     }
-    if (showNewAlarmSheet) {
-        AlarmEditSheet(alarmId = null, onDismiss = { showNewAlarmSheet = false })
+    if (showAddSheet) {
+        AlarmEditSheet(alarmId = null, onDismiss = onAddSheetDismiss)
     }
 }
 

@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledIconButton
@@ -56,6 +58,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
@@ -103,6 +107,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     var defaultFadeInSeconds by remember { mutableIntStateOf(persistedDefaults.fadeInSeconds) }
     var clockStyle by remember { mutableStateOf(persistedClockStyle) }
     var widgetAppearance by remember { mutableStateOf(persistedWidgetAppearance) }
+    var accessTokenVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         enabled = persisted.enabled
@@ -253,6 +258,17 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onValueChange = { accessToken = it },
                 label = { Text("Long-Lived Access Token") },
                 supportingText = { Text("Generate one in Home Assistant under your profile's Security tab.") },
+                singleLine = true,
+                visualTransformation = if (accessTokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    IconButton(onClick = { accessTokenVisible = !accessTokenVisible }) {
+                        Icon(
+                            if (accessTokenVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (accessTokenVisible) "Hide token" else "Show token",
+                        )
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedButton(

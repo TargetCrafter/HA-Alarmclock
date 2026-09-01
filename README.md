@@ -67,9 +67,21 @@ alarm for you).
   with a `HorizontalPager` as well as tappable, with matching filled/outlined icon
   states (filled = selected, outlined = not, for all three consistently) so the bottom
   nav reads as one style rather than a mismatched one. The app reopens on whichever tab
-  you had open last (`TabPreferencesStore`), not always the first one. Each tab has its
-  own Settings entry point, top-right on a compact `TopAppBar` (switched from
-  `LargeTopAppBar`, which read as sitting lower thanks to the large title block below it).
+  you had open last (`TabPreferencesStore`), not always the first one.
+- **The top app bar, its settings entry point, and the "add" floating action button are
+  shared chrome owned by `MainActivity`'s `TabsScreen`, not by each tab screen.** They
+  sit in one `Scaffold` around the `HorizontalPager`, so they stay fixed in place while
+  swiping between tabs — only the title text and the FAB's label track the current tab
+  (e.g. "Add alarm" vs "Add timer" vs "Add time zone"). The settings entry point is a
+  three-dot (`Icons.Filled.MoreVert`) button, not a gear. Each tab screen itself is now
+  just its content (list/column) plus its own dialogs, taking `showAddDialog`/
+  `onAddDialogDismiss` (or the alarm list's `showAddSheet`/`onAddSheetDismiss`) from the
+  parent instead of owning a boolean of its own — keyed by *which page* requested it, so
+  a swipe away from the tab that opened it can't leak "show add" into whatever tab lands
+  underneath.
+- **Every floating action button in the app uses the same icon+text
+  `ExtendedFloatingActionButton` style** — the shared Add FAB, Settings' Save, and the
+  alarm editor sheet's Save — instead of some being icon-only.
 - **The Clock tab shows the live local time (with seconds), switchable between analog
   and digital in Settings**, plus an addable/removable list of other timezones —
   app-local only, never synced to HA. World clock rows stay plain digital text
@@ -100,20 +112,24 @@ alarm for you).
   digital widget's `TextClock` still ticks on its own with no code involved; the
   analog widget's face used to be the system `android.widget.AnalogClock`, but that
   rendered blank in practice (and, being a fixed system drawable, couldn't be
-  recolored anyway) — it's now drawn to a `Bitmap` by hand (`AnalogClockRenderer`) and
-  pushed via `RemoteViews.setImageViewBitmap`, redrawn once a minute by a
-  self-rescheduling `AlarmManager` trigger (`AnalogWidgetTicker`) that's only ever
-  armed while an analog widget instance actually exists (armed in `onEnabled`/
-  `onUpdate`/after reboot, cancelled the moment the last instance is removed in
-  `onDisabled`). A since-removed "dynamic launcher icon" feature also turned out to be
-  crashing the app on every launch (`PackageManager.setComponentEnabledSetting` on an
-  `activity-alias` failing inside an uncaught coroutine) — which meant *no* widget
-  update had ever actually reached the device, since Android runs `Application.onCreate()`
-  before delivering any broadcast/widget callback; that alone was enough to explain the
-  blank analog widget without any bug in the renderer itself. `HaAlarmClockApp`'s
-  background coroutine scope now also carries a `CoroutineExceptionHandler` that logs
-  instead of crashing, so a bug in one background task can't take the whole app down
-  with it again.
+  recolored anyway) — it's now drawn to a `Bitmap` by hand (`AnalogClockRenderer`,
+  matching the same proportions as the in-app Clock tab's `AnalogClockFace`: same tick
+  marks, same hour/minute hand lengths) and pushed via `RemoteViews.setImageViewBitmap`,
+  redrawn once a minute by a self-rescheduling `AlarmManager` trigger
+  (`AnalogWidgetTicker`) that's only ever armed while an analog widget instance actually
+  exists (armed in `onEnabled`/`onUpdate`/after reboot, cancelled the moment the last
+  instance is removed in `onDisabled`). A since-removed "dynamic launcher icon" feature
+  was also found to be crashing the app on every launch
+  (`PackageManager.setComponentEnabledSetting` on an `activity-alias` failing inside an
+  uncaught coroutine, fixed by removing that feature and giving `HaAlarmClockApp`'s
+  background coroutine scope a `CoroutineExceptionHandler` that logs instead of
+  crashing) — but that turned out to be a red herring for the blank widget specifically:
+  the actual cause was `widget_analog_clock.xml`'s `ImageView` having
+  `android:layout_width="0dp"` inside a *vertical* `LinearLayout`. `layout_weight` only
+  distributes space along a `LinearLayout`'s main axis (height, here); on the cross axis
+  a `0dp` width just stays a literal zero, so the face was always being measured and
+  drawn into a zero-width view no matter how correct the bitmap it held was. Fixed by
+  changing it to `match_parent`.
 - **Both widgets' colors are configurable in Settings** — a background and a
   foreground (hands/text) color, each pickable from a preset swatch row or typed as a
   hex code, applied live via `RemoteViews.setInt(..., "setBackgroundColor", ...)` /
@@ -232,11 +248,15 @@ No new dangerous permission was needed for timers or the widgets.
 
 ## Not yet implemented
 
-A stopwatch, and a redesigned app icon (a replacement is planned but blocked on
-getting the actual source asset into the repo). Alarms, timers, widgets, and a Clock
-tab with world clocks are all in. The HA access token is stored in
-`EncryptedSharedPreferences`; clock style, widget colors, and the world-clock list are
-in plain (unencrypted) SharedPreferences, since none of it is sensitive. The
+A stopwatch. Alarms, timers, widgets, a Clock tab with world clocks, and a custom app
+icon (an adaptive icon: a flat-white vector background layer plus a gradient-filled
+foreground rasterized from the provided SVG into density-specific PNG mipmaps, since
+Android's vector `<gradient>` element only supports a true circular radial gradient and
+can't reproduce the source's elliptical stretch) are all in. The HA access token field
+in Settings is masked like a password field (with a tap-to-reveal toggle) and the token
+itself is stored in `EncryptedSharedPreferences`; clock style, widget colors, and the
+world-clock list are in plain (unencrypted) SharedPreferences, since none of it is
+sensitive. The
 integration's device state lives in memory only — it's rebuilt from the phone's next
 push after a Home Assistant restart rather than persisted to disk. Timers aren't
 controllable *from* HA (only exposed as sensors) — only alarms have a switch entity

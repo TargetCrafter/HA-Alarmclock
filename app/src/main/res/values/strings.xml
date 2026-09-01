@@ -34,4 +34,7 @@
     <string name="timer_hours">h</string>
     <string name="timer_minutes">m</string>
     <string name="timer_seconds">s</string>
+    <string name="add_alarm">Add alarm</string>
+    <string name="add_timezone">Add time zone</string>
+    <string name="settings">Settings</string>
 </resources>
