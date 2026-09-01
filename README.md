@@ -93,7 +93,16 @@ alarm for you).
   alarm editor sheet's Save — instead of some being icon-only.
 - **The Clock tab shows the live local time (with seconds), switchable between analog
   and digital in Settings**, plus an addable/removable list of other timezones —
-  app-local only, never synced to HA. World clock rows stay plain digital text
+  app-local only, never synced to HA. Adding one searches by country/region name as well
+  as raw zone id — typing "Lebanon" finds `Asia/Beirut` even though the id itself has no
+  "Lebanon" in it. `rememberZoneDirectory()` in `ClockScreen.kt` builds this by pairing
+  every `java.time.ZoneId` with the display name of whichever country
+  `android.icu.util.TimeZone.getAvailableIDs(countryCode)` associates it with (iterating
+  `Locale.getISOCountries()`), entirely offline and on-device — no geocoding API
+  involved. The search matches either field, and each result's country name (when it has
+  one — fixed-offset/`Etc/...` zones and UTC don't) shows as a subtitle so a
+  country-name search with several matches (e.g. "United States") is easy to tell apart.
+  World clock rows stay plain digital text
   (`HH:mm` + a "tomorrow"/"yesterday" note when the date differs) regardless of that
   setting; only the big local-time display switches style. The analog face is drawn
   live with Compose's `Canvas` (`ui/clock/AnalogClockFace.kt`), styled to match the

@@ -44,6 +44,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 private val COMMON_ZONE_IDS = listOf(
     "UTC",
@@ -148,12 +149,39 @@ private fun WorldClockRow(zoneId: String, now: ZonedDateTime, onRemove: () -> Un
     )
 }
 
+/** A zone id paired with the display name of the country it belongs to (per ICU's tz-to-country
+ * data), so searching "Lebanon" can find `Asia/Beirut` without the user needing to already know
+ * that's the right zone id. Null when ICU doesn't associate the zone with any single country
+ * (UTC and the other fixed-offset/"Etc/..." zones, mostly). */
+private data class ZoneEntry(val zoneId: String, val countryName: String?)
+
+@Composable
+private fun rememberZoneDirectory(): List<ZoneEntry> = remember {
+    val canonicalZoneIds = ZoneId.getAvailableZoneIds()
+    val zoneToCountry = mutableMapOf<String, String>()
+    for (countryCode in Locale.getISOCountries()) {
+        val countryName = Locale.Builder().setRegion(countryCode).build().displayCountry
+        if (countryName.isBlank()) continue
+        for (zoneId in android.icu.util.TimeZone.getAvailableIDs(countryCode)) {
+            if (zoneId in canonicalZoneIds) zoneToCountry.putIfAbsent(zoneId, countryName)
+        }
+    }
+    canonicalZoneIds.sorted().map { ZoneEntry(it, zoneToCountry[it]) }
+}
+
 @Composable
 private fun AddTimezoneDialog(existing: List<String>, onDismiss: () -> Unit, onAdd: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
-    val allZoneIds = remember { ZoneId.getAvailableZoneIds().sorted() }
-    val results = remember(query) {
-        if (query.isBlank()) COMMON_ZONE_IDS else allZoneIds.filter { it.contains(query, ignoreCase = true) }.take(100)
+    val zoneDirectory = rememberZoneDirectory()
+    val results = remember(query, zoneDirectory) {
+        if (query.isBlank()) {
+            COMMON_ZONE_IDS.map { id -> zoneDirectory.firstOrNull { it.zoneId == id } ?: ZoneEntry(id, null) }
+        } else {
+            zoneDirectory.filter { entry ->
+                entry.zoneId.contains(query, ignoreCase = true) ||
+                    entry.countryName?.contains(query, ignoreCase = true) == true
+            }.take(100)
+        }
     }
 
     AlertDialog(
@@ -165,17 +193,19 @@ private fun AddTimezoneDialog(existing: List<String>, onDismiss: () -> Unit, onA
                     value = query,
                     onValueChange = { query = it },
                     label = { Text("Search") },
+                    placeholder = { Text("City, region, or country") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 LazyColumn(modifier = Modifier.heightIn(max = 320.dp).padding(top = 8.dp)) {
-                    items(results, key = { it }) { zoneId ->
-                        val alreadyAdded = zoneId in existing
+                    items(results, key = { it.zoneId }) { entry ->
+                        val alreadyAdded = entry.zoneId in existing
                         ListItem(
-                            headlineContent = { Text(zoneId) },
+                            headlineContent = { Text(entry.zoneId) },
+                            supportingContent = entry.countryName?.let { { Text(it) } },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable(enabled = !alreadyAdded) { onAdd(zoneId) },
+                                .clickable(enabled = !alreadyAdded) { onAdd(entry.zoneId) },
                             trailingContent = if (alreadyAdded) {
                                 { Text("Added", style = MaterialTheme.typography.bodySmall) }
                             } else {
