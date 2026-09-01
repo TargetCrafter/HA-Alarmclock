@@ -3,7 +3,6 @@ package com.targetcrafter.haalarmclock.ui.clock
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -14,6 +13,13 @@ import java.time.LocalTime
 import kotlin.math.cos
 import kotlin.math.sin
 
+/** The classic red for the second hand and pivot dot — deliberately not theme-driven, so it reads
+ * the same way a real clock's red second hand does regardless of the app's Material color scheme.
+ * [com.targetcrafter.haalarmclock.widget.AnalogClockRenderer] uses the same hex value for the
+ * home-screen widget's second hand so the two stay visually matched.
+ */
+val ANALOG_CLOCK_SECOND_HAND_COLOR = Color(0xFFE53935)
+
 /** A live analog clock face drawn with Compose's [Canvas] — the in-app counterpart to
  * [com.targetcrafter.haalarmclock.widget.AnalogClockRenderer], which draws the same shape onto a
  * Bitmap for the home-screen widget (Compose can draw directly here, no RemoteViews involved).
@@ -23,7 +29,7 @@ fun AnalogClockFace(
     time: LocalTime,
     modifier: Modifier = Modifier,
     color: Color = LocalContentColor.current,
-    accentColor: Color = MaterialTheme.colorScheme.primary,
+    accentColor: Color = ANALOG_CLOCK_SECOND_HAND_COLOR,
 ) {
     Canvas(modifier = modifier.aspectRatio(1f)) {
         val radius = size.minDimension / 2f * 0.9f

@@ -14,8 +14,19 @@ class DigitalClockWidgetProvider : AppWidgetProvider() {
     }
 }
 
-/** Analog clock widget: a custom-drawn face (see [AnalogClockRenderer]) redrawn once a minute by
- * [AnalogWidgetTicker] for as long as at least one instance exists, plus the next-alarm line.
+/** Same digital widget, minus the background fill — just the time and next-alarm text straight
+ * on the wallpaper. A separate provider (rather than a setting) so it shows as its own pickable
+ * entry in the system widget picker, the same way Android's own widgets offer variants.
+ */
+class DigitalClockTransparentWidgetProvider : AppWidgetProvider() {
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        refreshAsync(context)
+    }
+}
+
+/** Analog clock widget: a custom-drawn face (see [AnalogClockRenderer]) redrawn by
+ * [AnalogWidgetTicker] for as long as at least one instance — of either analog variant, see
+ * [AnalogClockTransparentWidgetProvider] — exists, plus the next-alarm line.
  */
 class AnalogClockWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
@@ -28,7 +39,25 @@ class AnalogClockWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onDisabled(context: Context) {
-        AnalogWidgetTicker.cancel(context)
+        AnalogWidgetTicker.cancelIfNoInstances(context)
+    }
+}
+
+/** Same analog widget, minus the background fill — just the circular face and next-alarm line
+ * straight on the wallpaper, no rectangle behind it. See [DigitalClockTransparentWidgetProvider].
+ */
+class AnalogClockTransparentWidgetProvider : AppWidgetProvider() {
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        refreshAsync(context)
+        AnalogWidgetTicker.scheduleNextTick(context)
+    }
+
+    override fun onEnabled(context: Context) {
+        AnalogWidgetTicker.scheduleNextTick(context)
+    }
+
+    override fun onDisabled(context: Context) {
+        AnalogWidgetTicker.cancelIfNoInstances(context)
     }
 }
 

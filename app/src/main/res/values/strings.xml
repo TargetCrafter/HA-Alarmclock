@@ -13,6 +13,8 @@
     <string name="snoozed_until">Snoozed until %1$s</string>
     <string name="widget_digital_clock_label">Digital clock</string>
     <string name="widget_analog_clock_label">Analog clock</string>
+    <string name="widget_digital_clock_transparent_label">Digital clock (no background)</string>
+    <string name="widget_analog_clock_transparent_label">Analog clock (no background)</string>
     <string name="widget_next_alarm">Next: %1$s</string>
     <string name="widget_no_alarm">No alarm set</string>
 

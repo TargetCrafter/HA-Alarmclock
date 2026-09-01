@@ -95,6 +95,17 @@
         </receiver>
 
         <receiver
+            android:name=".widget.DigitalClockTransparentWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_digital_clock_transparent_info" />
+        </receiver>
+
+        <receiver
             android:name=".widget.AnalogClockWidgetProvider"
             android:exported="false">
             <intent-filter>
@@ -103,6 +114,17 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_analog_clock_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.AnalogClockTransparentWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_analog_clock_transparent_info" />
         </receiver>
 
         <receiver

@@ -2,6 +2,7 @@ package com.targetcrafter.haalarmclock.widget
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import kotlin.math.cos
 import kotlin.math.sin
@@ -11,17 +12,21 @@ import kotlin.math.sin
  * placement (roughly a 4x4-cell widget) without being wasteful. */
 private const val RENDER_SIZE_PX = 360
 
+/** Matches [com.targetcrafter.haalarmclock.ui.clock.ANALOG_CLOCK_SECOND_HAND_COLOR] so the
+ * widget's second hand/pivot looks the same as the in-app Clock tab's. */
+private val SECOND_HAND_COLOR = Color.parseColor("#E53935")
+
 /**
  * Draws an analog clock face onto a [Bitmap] to push into the widget's ImageView via
  * [android.widget.RemoteViews.setImageViewBitmap]. Replaces the system [android.widget.AnalogClock]
  * (which rendered blank in practice and — being a fixed system drawable — can't be recolored to
  * match user-chosen widget colors anyway). Since RemoteViews can't run arbitrary drawing code
- * itself, this bitmap needs to be regenerated and re-pushed on every minute tick — see
+ * itself, this bitmap needs to be regenerated and re-pushed on every tick — see
  * AnalogWidgetTicker.
  */
 object AnalogClockRenderer {
 
-    fun render(hour: Int, minute: Int, color: Int): Bitmap {
+    fun render(hour: Int, minute: Int, second: Int, color: Int): Bitmap {
         val bitmap = Bitmap.createBitmap(RENDER_SIZE_PX, RENDER_SIZE_PX, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val cx = RENDER_SIZE_PX / 2f
@@ -56,7 +61,10 @@ object AnalogClockRenderer {
         val minuteAngle = Math.toRadians((minute * 6.0 - 90))
         drawHand(canvas, cx, cy, minuteAngle, radius * 0.75f, RENDER_SIZE_PX * 0.03f, color)
 
-        val centerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color; style = Paint.Style.FILL }
+        val secondAngle = Math.toRadians((second * 6.0 - 90))
+        drawHand(canvas, cx, cy, secondAngle, radius * 0.85f, RENDER_SIZE_PX * 0.012f, SECOND_HAND_COLOR)
+
+        val centerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = SECOND_HAND_COLOR; style = Paint.Style.FILL }
         canvas.drawCircle(cx, cy, RENDER_SIZE_PX * 0.035f, centerPaint)
 
         return bitmap

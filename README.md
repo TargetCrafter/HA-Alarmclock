@@ -87,8 +87,10 @@ alarm for you).
   app-local only, never synced to HA. World clock rows stay plain digital text
   (`HH:mm` + a "tomorrow"/"yesterday" note when the date differs) regardless of that
   setting; only the big local-time display switches style. The analog face is drawn
-  live with Compose's `Canvas` (`ui/clock/AnalogClockFace.kt`), including a second
-  hand — the one place in the app seconds are shown continuously.
+  live with Compose's `Canvas` (`ui/clock/AnalogClockFace.kt`), including a red second
+  hand and pivot dot — the one place in the app seconds are shown continuously, and the
+  only part of the face that isn't theme-driven, deliberately, to read like a real
+  clock's second hand.
 - **Editing is in-place, not a separate screen.** Tap an alarm's time for a quick
   time-only popup — which now also has a Delete action, so removing an alarm doesn't
   require opening the full editor either — or tap its label/repeat area for the full
@@ -107,19 +109,42 @@ alarm for you).
   buttons** (96dp tall, distinct filled colors, an icon plus large text each) instead
   of two side-by-side outlined buttons, so they're easy to tell apart and hit
   accurately the moment you wake up.
-- **Two home-screen widgets** — analog and digital clock — both showing a live
+- **Four home-screen widgets** — analog and digital clock, each in an opaque
+  (background-filled) and a transparent (no-background) variant, all showing a live
   "Next: HH:mm" line for the soonest alarm, refreshed whenever alarms change. The
-  digital widget's `TextClock` still ticks on its own with no code involved; the
-  analog widget's face used to be the system `android.widget.AnalogClock`, but that
+  transparent variants (`AnalogClockTransparentWidgetProvider`/
+  `DigitalClockTransparentWidgetProvider`) are separate `AppWidgetProvider`s reusing the
+  same layouts as their opaque counterparts — not a setting — so they show up as their
+  own pickable entries in the system widget picker (like Android's own widgets do for
+  their variants); `ClockWidgetUpdater` just skips the `setBackgroundColor` call for
+  them, leaving the wallpaper showing through behind the analog widget's circle or the
+  digital widget's text, with no rectangle behind either.
+- The digital widgets' `TextClock` still ticks on its own with no code involved; the
+  analog widgets' face used to be the system `android.widget.AnalogClock`, but that
   rendered blank in practice (and, being a fixed system drawable, couldn't be
   recolored anyway) — it's now drawn to a `Bitmap` by hand (`AnalogClockRenderer`,
   matching the same proportions as the in-app Clock tab's `AnalogClockFace`: same tick
-  marks, same hour/minute hand lengths) and pushed via `RemoteViews.setImageViewBitmap`,
-  redrawn once a minute by a self-rescheduling `AlarmManager` trigger
-  (`AnalogWidgetTicker`) that's only ever armed while an analog widget instance actually
-  exists (armed in `onEnabled`/`onUpdate`/after reboot, cancelled the moment the last
-  instance is removed in `onDisabled`). A since-removed "dynamic launcher icon" feature
-  was also found to be crashing the app on every launch
+  marks, same hour/minute hand lengths, and now also **a red second hand and pivot dot**
+  on both — `ANALOG_CLOCK_SECOND_HAND_COLOR`/`AnalogClockRenderer`'s
+  `SECOND_HAND_COLOR` share the same `#E53935` so the app and the widget match) and
+  pushed via `RemoteViews.setImageViewBitmap`, redrawn by a self-rescheduling
+  `AlarmManager` trigger (`AnalogWidgetTicker`) that's only ever armed while at least
+  one analog widget instance — opaque or transparent — actually exists (armed in
+  `onEnabled`/`onUpdate`/after reboot, cancelled once the last instance of *both*
+  variants is removed, tracked across `onDisabled` calls that each only see their own
+  provider's instances going to zero). It ticks every second — needed now for the
+  second hand to actually move — via `setExactAndAllowWhileIdle`, deliberately without
+  any explicit screen-on/off detection of its own: `ACTION_SCREEN_ON`/`_OFF` have never
+  been deliverable to a manifest-declared receiver (a long-standing Android
+  restriction, not something introduced by the API 26 implicit-broadcast changes), and
+  this app has no always-running component to hold a dynamically-registered one
+  instead. Relying on `setExactAndAllowWhileIdle`'s own behavior gets the same outcome
+  for free: no Doze throttling while the screen is on (so ticks land on schedule and
+  the second hand moves smoothly), and the system itself defers "while idle" alarms to
+  widening maintenance windows once the device settles into Doze after the screen goes
+  off — self-correcting back to smooth ticking the moment the screen comes back on,
+  with no custom battery-saving logic needed. A since-removed "dynamic launcher icon"
+  feature was also found to be crashing the app on every launch
   (`PackageManager.setComponentEnabledSetting` on an `activity-alias` failing inside an
   uncaught coroutine, fixed by removing that feature and giving `HaAlarmClockApp`'s
   background coroutine scope a `CoroutineExceptionHandler` that logs instead of
@@ -130,16 +155,18 @@ alarm for you).
   a `0dp` width just stays a literal zero, so the face was always being measured and
   drawn into a zero-width view no matter how correct the bitmap it held was. Fixed by
   changing it to `match_parent`.
-- **Both widgets' colors are configurable in Settings** — a background and a
+- **All four widgets' colors are configurable in Settings** — a background and a
   foreground (hands/text) color, each pickable from a preset swatch row or typed as a
   hex code, applied live via `RemoteViews.setInt(..., "setBackgroundColor", ...)` /
-  `setTextColor`/the bitmap renderer. Default is grayscale (`#2E2E2E` background,
-  `#E8E8E8` foreground) so the widgets blend into as many wallpapers/launchers as
-  possible out of the box; a "Reset to default" button restores that. One caveat:
-  because the color is applied as a plain `ColorDrawable`, the widgets lose their
-  rounded corners on Android 11 and below — Android 12+ launchers round/clip every
-  widget's outer bounds automatically regardless of its own background, so this only
-  matters pre-12.
+  `setTextColor`/the bitmap renderer (the transparent variants still honor the
+  foreground color, just never the background one). Default is grayscale (`#2E2E2E`
+  background, `#E8E8E8` foreground) so the opaque widgets blend into as many
+  wallpapers/launchers as possible out of the box; a "Reset to default" button restores
+  that. One caveat: because the color is applied as a plain `ColorDrawable`, the opaque
+  widgets lose their rounded corners on Android 11 and below — Android 12+ launchers
+  round/clip every widget's outer bounds automatically regardless of its own
+  background, so this only matters pre-12 (moot for the transparent variants, which
+  have no rectangle to round in the first place).
 - Uses plain `MaterialTheme` on stable `material3` (pinned to `1.4.0` in
   `gradle/libs.versions.toml`, overriding the Compose BOM's own suggestion, which
   currently maps to an older 1.3.x). Material 3 Expressive's actual theme wrapper
