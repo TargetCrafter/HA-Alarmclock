@@ -1,17 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="12dp">
+    android:layout_height="match_parent">
 
     <ImageView
         android:id="@+id/widget_analog_face"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="match_parent"
+        android:padding="8dp"
         android:contentDescription="@null"
         android:scaleType="fitCenter" />
 
@@ -19,9 +16,10 @@
         android:id="@+id/widget_next_alarm"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="14dp"
         android:textSize="12sp"
         android:maxLines="1"
         android:ellipsize="end" />
 
-</LinearLayout>
+</FrameLayout>

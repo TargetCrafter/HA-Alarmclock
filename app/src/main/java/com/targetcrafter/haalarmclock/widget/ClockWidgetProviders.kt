@@ -24,22 +24,23 @@ class DigitalClockTransparentWidgetProvider : AppWidgetProvider() {
     }
 }
 
-/** Analog clock widget: a custom-drawn face (see [AnalogClockRenderer]) redrawn by
- * [AnalogWidgetTicker] for as long as at least one instance — of either analog variant, see
- * [AnalogClockTransparentWidgetProvider] — exists, plus the next-alarm line.
+/** Analog clock widget: a custom-drawn face (see [AnalogClockRenderer]) kept ticking every second
+ * by [AnalogWidgetTickerService] (managed via [AnalogWidgetTicker]) for as long as at least one
+ * instance — of either analog variant, see [AnalogClockTransparentWidgetProvider] — exists, plus
+ * the next-alarm line.
  */
 class AnalogClockWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         refreshAsync(context)
-        AnalogWidgetTicker.scheduleNextTick(context)
+        AnalogWidgetTicker.ensureRunning(context)
     }
 
     override fun onEnabled(context: Context) {
-        AnalogWidgetTicker.scheduleNextTick(context)
+        AnalogWidgetTicker.ensureRunning(context)
     }
 
     override fun onDisabled(context: Context) {
-        AnalogWidgetTicker.cancelIfNoInstances(context)
+        AnalogWidgetTicker.stopIfNoInstances(context)
     }
 }
 
@@ -49,15 +50,15 @@ class AnalogClockWidgetProvider : AppWidgetProvider() {
 class AnalogClockTransparentWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         refreshAsync(context)
-        AnalogWidgetTicker.scheduleNextTick(context)
+        AnalogWidgetTicker.ensureRunning(context)
     }
 
     override fun onEnabled(context: Context) {
-        AnalogWidgetTicker.scheduleNextTick(context)
+        AnalogWidgetTicker.ensureRunning(context)
     }
 
     override fun onDisabled(context: Context) {
-        AnalogWidgetTicker.cancelIfNoInstances(context)
+        AnalogWidgetTicker.stopIfNoInstances(context)
     }
 }
 

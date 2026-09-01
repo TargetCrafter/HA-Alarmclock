@@ -16,10 +16,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Fired [UPCOMING_NOTIFICATION_LEAD_MILLIS] before an alarm rings, to post a heads-up notification
- * with a live countdown (via [NotificationCompat.Builder.setUsesChronometer]) and a "Skip" action,
- * so the alarm can be cancelled from the shade if the user is already awake. Also handles that
- * Skip action itself (see [ACTION_SKIP]).
+ * Fired [UPCOMING_NOTIFICATION_LEAD_MILLIS] (an hour) before an alarm rings, to post an ongoing,
+ * non-dismissable notification with a live countdown (via
+ * [NotificationCompat.Builder.setUsesChronometer]) and a "Skip" action, so the alarm can be
+ * cancelled from the shade if the user is already awake, and stays visible the whole hour instead
+ * of just flashing by. Also handles that Skip action itself (see [ACTION_SKIP]).
  */
 class UpcomingAlarmReceiver : BroadcastReceiver() {
 

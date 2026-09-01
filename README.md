@@ -63,22 +63,24 @@ alarm for you).
 
 ## UI/UX notes
 
-- **Clock, Alarms, and Timers are separate bottom-nav tabs** (Clock first), swipeable
-  with a `HorizontalPager` as well as tappable, with matching filled/outlined icon
-  states (filled = selected, outlined = not, for all three consistently) so the bottom
-  nav reads as one style rather than a mismatched one. The app reopens on whichever tab
-  you had open last (`TabPreferencesStore`), not always the first one.
+- **Clock, Alarms, Timers, and Stopwatch are separate bottom-nav tabs** (Clock first),
+  swipeable with a `HorizontalPager` as well as tappable, with matching filled/outlined
+  icon states (filled = selected, outlined = not, consistently across all four) so the
+  bottom nav reads as one style rather than a mismatched one. The app reopens on
+  whichever tab you had open last (`TabPreferencesStore`), not always the first one.
 - **The top app bar, its settings entry point, and the "add" floating action button are
   shared chrome owned by `MainActivity`'s `TabsScreen`, not by each tab screen.** They
   sit in one `Scaffold` around the `HorizontalPager`, so they stay fixed in place while
   swiping between tabs — only the title text and the FAB's label track the current tab
-  (e.g. "Add alarm" vs "Add timer" vs "Add time zone"). The settings entry point is a
-  three-dot (`Icons.Filled.MoreVert`) button, not a gear. Each tab screen itself is now
-  just its content (list/column) plus its own dialogs, taking `showAddDialog`/
-  `onAddDialogDismiss` (or the alarm list's `showAddSheet`/`onAddSheetDismiss`) from the
-  parent instead of owning a boolean of its own — keyed by *which page* requested it, so
-  a swipe away from the tab that opened it can't leak "show add" into whatever tab lands
-  underneath.
+  (e.g. "Add alarm" vs "Add timer" vs "Add time zone"; the Stopwatch tab has no "add"
+  concept, so the FAB just doesn't render there — `Tab.addLabelRes` is nullable and the
+  FAB lambda skips rendering when it's null, rather than repurposing the FAB for
+  something unrelated). The settings entry point is a three-dot (`Icons.Filled.MoreVert`)
+  button, not a gear. Each tab screen itself is now just its content (list/column) plus
+  its own dialogs, taking `showAddDialog`/`onAddDialogDismiss` (or the alarm list's
+  `showAddSheet`/`onAddSheetDismiss`) from the parent instead of owning a boolean of its
+  own — keyed by *which page* requested it, so a swipe away from the tab that opened it
+  can't leak "show add" into whatever tab lands underneath.
 - **Every floating action button in the app uses the same icon+text
   `ExtendedFloatingActionButton` style** — the shared Add FAB, Settings' Save, and the
   alarm editor sheet's Save — instead of some being icon-only.
@@ -91,6 +93,17 @@ alarm for you).
   hand and pivot dot — the one place in the app seconds are shown continuously, and the
   only part of the face that isn't theme-driven, deliberately, to read like a real
   clock's second hand.
+- **The Stopwatch tab counts up in `MM:SS.mmm`** with Start/Pause(Resume) and a
+  Lap/Reset button that switches meaning with state — Lap while running, Reset once
+  paused (disabled at a fresh `00:00.000`, since there's nothing to reset yet). Laps
+  list newest-first, each showing both its own split and the cumulative total at that
+  point. `StopwatchViewModel` times off `SystemClock.elapsedRealtime()` rather than
+  `System.currentTimeMillis()`, so it can't jump if the wall clock changes mid-run (NTP
+  sync, timezone, DST, the user editing the time). It's a plain `ViewModel`, not backed
+  by a foreground service or `AlarmManager` — a stopwatch has no completion to notify
+  about, unlike a timer, so there's nothing worth a permanent notification for; it keeps
+  running across tab swipes and a trip to Settings and back (both stay under the same
+  `TabsScreen` back-stack entry) but not past the app process being killed.
 - **Editing is in-place, not a separate screen.** Tap an alarm's time for a quick
   time-only popup — which now also has a Delete action, so removing an alarm doesn't
   require opening the full editor either — or tap its label/repeat area for the full
@@ -102,9 +115,11 @@ alarm for you).
   first 45 seconds; toggle it per-alarm in the options sheet.
 - **A snoozed alarm shows a "Snoozed until HH:MM" badge** on its row until it rings
   again or is otherwise cleared.
-- **10 minutes before an alarm**, a heads-up notification appears with a live
-  countdown and a "Skip" action, so you can cancel that occurrence if you're already
-  awake (repeating alarms just skip that one occurrence; one-off alarms get disabled).
+- **An hour before an alarm**, an ongoing (non-dismissable until skipped or it rings)
+  notification appears with a live countdown and a "Skip" action, so you can cancel
+  that occurrence if you're already awake (repeating alarms just skip that one
+  occurrence; one-off alarms get disabled) — and so there's a clear, persistent heads-up
+  well before the alarm, not just a brief one a few minutes out.
 - **The fullscreen ringing screen uses large, full-width, stacked Dismiss/Snooze
   buttons** (96dp tall, distinct filled colors, an icon plus large text each) instead
   of two side-by-side outlined buttons, so they're easy to tell apart and hit
@@ -127,34 +142,42 @@ alarm for you).
   marks, same hour/minute hand lengths, and now also **a red second hand and pivot dot**
   on both — `ANALOG_CLOCK_SECOND_HAND_COLOR`/`AnalogClockRenderer`'s
   `SECOND_HAND_COLOR` share the same `#E53935` so the app and the widget match) and
-  pushed via `RemoteViews.setImageViewBitmap`, redrawn by a self-rescheduling
-  `AlarmManager` trigger (`AnalogWidgetTicker`) that's only ever armed while at least
-  one analog widget instance — opaque or transparent — actually exists (armed in
-  `onEnabled`/`onUpdate`/after reboot, cancelled once the last instance of *both*
-  variants is removed, tracked across `onDisabled` calls that each only see their own
-  provider's instances going to zero). It ticks every second — needed now for the
-  second hand to actually move — via `setExactAndAllowWhileIdle`, deliberately without
-  any explicit screen-on/off detection of its own: `ACTION_SCREEN_ON`/`_OFF` have never
-  been deliverable to a manifest-declared receiver (a long-standing Android
-  restriction, not something introduced by the API 26 implicit-broadcast changes), and
-  this app has no always-running component to hold a dynamically-registered one
-  instead. Relying on `setExactAndAllowWhileIdle`'s own behavior gets the same outcome
-  for free: no Doze throttling while the screen is on (so ticks land on schedule and
-  the second hand moves smoothly), and the system itself defers "while idle" alarms to
-  widening maintenance windows once the device settles into Doze after the screen goes
-  off — self-correcting back to smooth ticking the moment the screen comes back on,
-  with no custom battery-saving logic needed. A since-removed "dynamic launcher icon"
-  feature was also found to be crashing the app on every launch
-  (`PackageManager.setComponentEnabledSetting` on an `activity-alias` failing inside an
-  uncaught coroutine, fixed by removing that feature and giving `HaAlarmClockApp`'s
-  background coroutine scope a `CoroutineExceptionHandler` that logs instead of
-  crashing) — but that turned out to be a red herring for the blank widget specifically:
-  the actual cause was `widget_analog_clock.xml`'s `ImageView` having
-  `android:layout_width="0dp"` inside a *vertical* `LinearLayout`. `layout_weight` only
-  distributes space along a `LinearLayout`'s main axis (height, here); on the cross axis
-  a `0dp` width just stays a literal zero, so the face was always being measured and
+  pushed via `RemoteViews.setImageViewBitmap`. The transparent variant's bitmap also
+  bakes in a filled circle behind the face in the current background color, so it still
+  reads as a clock face sitting on the wallpaper rather than bare hands, without the
+  rectangle the opaque variant already gets from the widget's own background.
+- **Redrawing it every second — so the second hand actually moves — needs a foreground
+  service (`AnalogWidgetTickerService`), not just `AlarmManager`.** An `AlarmManager`
+  trigger (even the Doze-surviving `setExactAndAllowWhileIdle`) is what the first version
+  of this used, ticking once a minute at first and then once a second, but Android
+  throttles that API to roughly every few seconds for an app that isn't in the
+  foreground — a platform ceiling, not a bug in how it was being scheduled. A foreground
+  service isn't subject to that: a plain coroutine `delay(1000)` loop fires on schedule
+  for as long as it's alive. The cost — and it's a real one, gone into with eyes open —
+  is the low-priority, silent, ongoing "Keeping the analog widget's second hand live"
+  notification Android requires any foreground service to show, plus a bit more battery
+  use, for as long as an analog widget (opaque or transparent) is on your home screen.
+  `AnalogWidgetTicker.ensureRunning`/`stopIfNoInstances` start and stop it — called from
+  `onEnabled`/`onUpdate`/after reboot, and from `onDisabled`, tracking both analog
+  provider variants together since a provider's own `onDisabled` only fires when *that
+  specific* provider's last instance is removed, not the other variant's.
+- **The analog widget's clock face is now full-bleed** (a `FrameLayout` with the
+  `ImageView` filling the whole widget) **instead of being squeezed above a fixed text
+  row**, so it's noticeably bigger; the next-alarm line now overlays near the bottom of
+  the face instead of taking up its own row underneath it. Both widgets — analog and
+  digital, opaque and transparent — now also hide that line entirely when there's no
+  next alarm at all, instead of a permanent "No alarm set" placeholder.
+- A since-removed "dynamic launcher icon" feature was also found to be crashing the app
+  on every launch (`PackageManager.setComponentEnabledSetting` on an `activity-alias`
+  failing inside an uncaught coroutine, fixed by removing that feature and giving
+  `HaAlarmClockApp`'s background coroutine scope a `CoroutineExceptionHandler` that logs
+  instead of crashing) — but that turned out to be a red herring for an *earlier* blank-
+  widget report: the actual cause back then was `widget_analog_clock.xml`'s `ImageView`
+  having `android:layout_width="0dp"` inside a *vertical* `LinearLayout`. `layout_weight`
+  only distributes space along a `LinearLayout`'s main axis (height, here); on the cross
+  axis a `0dp` width just stays a literal zero, so the face was always being measured and
   drawn into a zero-width view no matter how correct the bitmap it held was. Fixed by
-  changing it to `match_parent`.
+  changing it to `match_parent` (superseded since by the `FrameLayout` rework above).
 - **All four widgets' colors are configurable in Settings** — a background and a
   foreground (hands/text) color, each pickable from a preset swatch row or typed as a
   hex code, applied live via `RemoteViews.setInt(..., "setBackgroundColor", ...)` /
@@ -186,15 +209,16 @@ app/src/main/java/com/targetcrafter/haalarmclock/
   timer/    the timer counterpart to alarm/ — TimerScheduler, TimerReceiver
             (trigger + notification Pause/Resume/Cancel actions), TimerService
             (ringing phase only), TimerNotifications (the live countdown one)
-  widget/   the analog/digital clock home-screen widgets — AppWidgetProviders,
-            AnalogClockRenderer (hand-drawn bitmap face), AnalogWidgetTicker
-            (its once-a-minute redraw trigger), ClockWidgetUpdater (pushes colors +
-            next-alarm text into every instance of both)
+  widget/   the analog/digital clock home-screen widgets (opaque + transparent variant
+            of each) — AppWidgetProviders, AnalogClockRenderer (hand-drawn bitmap face),
+            AnalogWidgetTickerService (the foreground service that redraws the analog
+            face every second) + AnalogWidgetTicker (starts/stops it), ClockWidgetUpdater
+            (pushes colors + next-alarm text into every instance of all four)
   ha/       HA settings storage, the REST push client, the command WebSocket
             client, and the foreground service that ties them together
   ui/       Jetpack Compose screens (alarm list, timer list, clock/world clocks,
-            editor, settings) + ViewModels; MainActivity's TabsScreen is the
-            HorizontalPager + bottom nav shared by all three main tabs; data/ holds
+            stopwatch, editor, settings) + ViewModels; MainActivity's TabsScreen is the
+            HorizontalPager + bottom nav shared by all four main tabs; data/ holds
             the plain-SharedPreferences stores behind Settings' clock-style and
             widget-color pickers, the world-clock timezone list, and the
             last-open-tab memory (ClockPreferencesStore, WidgetAppearanceStore,
@@ -264,18 +288,22 @@ a real smoke test before relying on it.
 ## Permissions
 
 - `SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM` — required to use `setAlarmClock()`.
-- `POST_NOTIFICATIONS` — for the ringing alarm and the (minimum-priority) HA sync
-  status notification.
+- `POST_NOTIFICATIONS` — for the ringing alarm, the (minimum-priority) HA sync status
+  notification, and the (also minimum-priority) analog-widget-ticker notification.
 - `FOREGROUND_SERVICE_MEDIA_PLAYBACK` — the alarm and timer ringing services play sound.
 - `FOREGROUND_SERVICE_DATA_SYNC` — the HA sync service keeps a network connection.
-- `RECEIVE_BOOT_COMPLETED` — alarms, timers, and the HA connection are re-armed after
-  reboot (AlarmManager entries don't survive one on their own).
+- `FOREGROUND_SERVICE_SPECIAL_USE` — `AnalogWidgetTickerService`'s per-second redraw
+  loop, since none of the predefined foreground service types (data sync, media
+  playback, location, and so on) fit "keep a widget's second hand moving."
+- `RECEIVE_BOOT_COMPLETED` — alarms, timers, the HA connection, and the analog widget
+  ticker are all re-armed after reboot (neither AlarmManager entries nor a running
+  service survive one on their own).
 
 No new dangerous permission was needed for timers or the widgets.
 
 ## Not yet implemented
 
-A stopwatch. Alarms, timers, widgets, a Clock tab with world clocks, and a custom app
+Alarms, timers, a stopwatch, widgets, a Clock tab with world clocks, and a custom app
 icon (an adaptive icon: a flat-white vector background layer plus a gradient-filled
 foreground rasterized from the provided SVG into density-specific PNG mipmaps, since
 Android's vector `<gradient>` element only supports a true circular radial gradient and
@@ -283,9 +311,10 @@ can't reproduce the source's elliptical stretch) are all in. The HA access token
 in Settings is masked like a password field (with a tap-to-reveal toggle) and the token
 itself is stored in `EncryptedSharedPreferences`; clock style, widget colors, and the
 world-clock list are in plain (unencrypted) SharedPreferences, since none of it is
-sensitive. The
-integration's device state lives in memory only — it's rebuilt from the phone's next
-push after a Home Assistant restart rather than persisted to disk. Timers aren't
-controllable *from* HA (only exposed as sensors) — only alarms have a switch entity
-and HA→phone commands; symmetric timer control (pause/resume/cancel from HA) would be
-a natural follow-up if wanted.
+sensitive. The stopwatch doesn't persist across app-process death (it's a plain
+`ViewModel`, not backed by any service — see the UI/UX notes above) and isn't synced to
+HA in any way. The integration's device state lives in memory only — it's rebuilt from
+the phone's next push after a Home Assistant restart rather than persisted to disk.
+Timers aren't controllable *from* HA (only exposed as sensors) — only alarms have a
+switch entity and HA→phone commands; symmetric timer control (pause/resume/cancel from
+HA) would be a natural follow-up if wanted.

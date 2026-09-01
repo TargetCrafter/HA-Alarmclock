@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.view.View
 import android.widget.RemoteViews
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
 import com.targetcrafter.haalarmclock.R
@@ -34,23 +35,31 @@ object ClockWidgetUpdater {
         val alarms = app.repository.alarms.first()
         val appearance = app.widgetAppearanceStore.appearance.first()
         val next = alarms.filter { it.enabled }.minByOrNull { it.nextTriggerAtMillis() }
-        val label = next?.let { formatNextAlarm(context, it) } ?: context.getString(R.string.widget_no_alarm)
+        val label = next?.let { formatNextAlarm(context, it) }
 
         val manager = AppWidgetManager.getInstance(context)
         updateDigitalWidgets(context, manager, appearance, label, DigitalClockWidgetProvider::class.java, applyBackground = true)
         updateDigitalWidgets(context, manager, appearance, label, DigitalClockTransparentWidgetProvider::class.java, applyBackground = false)
 
         val now = LocalTime.now()
-        val face = AnalogClockRenderer.render(now.hour, now.minute, now.second, appearance.foregroundColor)
-        updateAnalogWidgets(context, manager, appearance, label, face, AnalogClockWidgetProvider::class.java, applyBackground = true)
-        updateAnalogWidgets(context, manager, appearance, label, face, AnalogClockTransparentWidgetProvider::class.java, applyBackground = false)
+        // The transparent variant bakes a circular disc behind the face right into the bitmap
+        // (see AnalogClockRenderer) so it still reads as a clock rather than bare hands on the
+        // wallpaper — the opaque variant already gets that from the widget's own rectangle, so it
+        // renders without one, meaning the two variants need separately rendered bitmaps.
+        val opaqueFace = AnalogClockRenderer.render(now.hour, now.minute, now.second, appearance.foregroundColor)
+        val transparentFace = AnalogClockRenderer.render(
+            now.hour, now.minute, now.second, appearance.foregroundColor,
+            backgroundCircleColor = appearance.backgroundColor,
+        )
+        updateAnalogWidgets(context, manager, appearance, label, opaqueFace, AnalogClockWidgetProvider::class.java, applyBackground = true)
+        updateAnalogWidgets(context, manager, appearance, label, transparentFace, AnalogClockTransparentWidgetProvider::class.java, applyBackground = false)
     }
 
     private fun updateDigitalWidgets(
         context: Context,
         manager: AppWidgetManager,
         appearance: WidgetAppearance,
-        nextAlarmLabel: String,
+        nextAlarmLabel: String?,
         provider: Class<out AppWidgetProvider>,
         applyBackground: Boolean,
     ) {
@@ -69,7 +78,7 @@ object ClockWidgetUpdater {
         context: Context,
         manager: AppWidgetManager,
         appearance: WidgetAppearance,
-        nextAlarmLabel: String,
+        nextAlarmLabel: String?,
         face: Bitmap,
         provider: Class<out AppWidgetProvider>,
         applyBackground: Boolean,
@@ -89,7 +98,7 @@ object ClockWidgetUpdater {
         context: Context,
         views: RemoteViews,
         appearance: WidgetAppearance,
-        nextAlarmLabel: String,
+        nextAlarmLabel: String?,
         applyBackground: Boolean,
     ) {
         // Losing the widget's rounded corners on API < 31 is the tradeoff for user-choosable
@@ -97,8 +106,16 @@ object ClockWidgetUpdater {
         // API 31+ launchers clip/round every widget's outer bounds automatically regardless.
         // The transparent variants skip this entirely, leaving the wallpaper showing through.
         views.setInt(R.id.widget_root, "setBackgroundColor", if (applyBackground) appearance.backgroundColor else Color.TRANSPARENT)
-        views.setTextViewText(R.id.widget_next_alarm, nextAlarmLabel)
-        views.setTextColor(R.id.widget_next_alarm, withAlpha(appearance.foregroundColor, 0.7f))
+        if (nextAlarmLabel != null) {
+            views.setViewVisibility(R.id.widget_next_alarm, View.VISIBLE)
+            views.setTextViewText(R.id.widget_next_alarm, nextAlarmLabel)
+            views.setTextColor(R.id.widget_next_alarm, withAlpha(appearance.foregroundColor, 0.7f))
+        } else {
+            // No alarm set at all — leaving a permanent "No alarm set" placeholder just added
+            // clutter, and for the analog widget it now overlays the clock face directly, so an
+            // unnecessary line there is more noticeable than it used to be below the face.
+            views.setViewVisibility(R.id.widget_next_alarm, View.GONE)
+        }
         views.setOnClickPendingIntent(
             R.id.widget_root,
             PendingIntent.getActivity(

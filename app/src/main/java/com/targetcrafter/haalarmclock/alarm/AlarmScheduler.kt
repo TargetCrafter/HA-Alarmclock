@@ -16,7 +16,7 @@ const val EXTRA_ALARM_ID = "alarm_id"
 const val EXTRA_IS_SNOOZE = "is_snooze"
 const val EXTRA_ORIGINAL_TRIGGER_AT_MILLIS = "original_trigger_at_millis"
 
-const val UPCOMING_NOTIFICATION_LEAD_MILLIS = 10 * 60 * 1000L
+const val UPCOMING_NOTIFICATION_LEAD_MILLIS = 60 * 60 * 1000L
 
 /**
  * Schedules alarms with [AlarmManager.setAlarmClock], the API meant for alarm-clock apps: it is

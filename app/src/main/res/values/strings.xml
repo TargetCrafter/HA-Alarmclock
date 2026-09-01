@@ -3,6 +3,8 @@
     <string name="notification_channel_alarm_ringing">Alarm ringing</string>
     <string name="notification_channel_ha_sync">Home Assistant sync</string>
     <string name="notification_channel_upcoming_alarm">Upcoming alarm</string>
+    <string name="notification_channel_widget_ticker">Widget updates</string>
+    <string name="widget_ticker_notification_title">Keeping the analog widget\'s second hand live</string>
     <string name="ha_sync_notification_title">HA Alarm Clock</string>
     <string name="ha_sync_notification_text_connected">Connected to Home Assistant</string>
     <string name="ha_sync_notification_text_disconnected">Not connected to Home Assistant</string>
@@ -16,7 +18,6 @@
     <string name="widget_digital_clock_transparent_label">Digital clock (no background)</string>
     <string name="widget_analog_clock_transparent_label">Analog clock (no background)</string>
     <string name="widget_next_alarm">Next: %1$s</string>
-    <string name="widget_no_alarm">No alarm set</string>
 
     <string name="notification_channel_timer">Timers</string>
     <string name="timer_default_label">Timer</string>
@@ -29,6 +30,7 @@
     <string name="tab_alarms">Alarms</string>
     <string name="tab_timers">Timers</string>
     <string name="tab_clock">Clock</string>
+    <string name="tab_stopwatch">Stopwatch</string>
     <string name="no_timers_yet">No timers yet. Tap + to add one.</string>
     <string name="add_timer">Add timer</string>
     <string name="start_timer">Start</string>

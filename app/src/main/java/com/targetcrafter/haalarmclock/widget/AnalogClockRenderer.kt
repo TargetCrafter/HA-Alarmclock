@@ -26,12 +26,21 @@ private val SECOND_HAND_COLOR = Color.parseColor("#E53935")
  */
 object AnalogClockRenderer {
 
-    fun render(hour: Int, minute: Int, second: Int, color: Int): Bitmap {
+    /** [backgroundCircleColor], when non-null, fills a disc behind the face/ticks/hands — used by
+     * the transparent widget variant so it still reads as a clock face rather than bare hands
+     * floating on the wallpaper, without the rectangle the opaque variant already gets from the
+     * widget's own background. Left `null` for the opaque variant, which would otherwise double up. */
+    fun render(hour: Int, minute: Int, second: Int, color: Int, backgroundCircleColor: Int? = null): Bitmap {
         val bitmap = Bitmap.createBitmap(RENDER_SIZE_PX, RENDER_SIZE_PX, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val cx = RENDER_SIZE_PX / 2f
         val cy = RENDER_SIZE_PX / 2f
         val radius = RENDER_SIZE_PX / 2f * 0.92f
+
+        if (backgroundCircleColor != null) {
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = backgroundCircleColor; style = Paint.Style.FILL }
+            canvas.drawCircle(cx, cy, RENDER_SIZE_PX / 2f * 0.98f, bgPaint)
+        }
 
         val facePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.color = color

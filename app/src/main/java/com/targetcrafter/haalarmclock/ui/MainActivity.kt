@@ -17,10 +17,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.AvTimer
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.AvTimer
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -53,6 +55,7 @@ import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.alarmlist.AlarmListScreen
 import com.targetcrafter.haalarmclock.ui.clock.ClockScreen
 import com.targetcrafter.haalarmclock.ui.settings.SettingsScreen
+import com.targetcrafter.haalarmclock.ui.stopwatch.StopwatchScreen
 import com.targetcrafter.haalarmclock.ui.theme.HaAlarmClockTheme
 import com.targetcrafter.haalarmclock.ui.timerlist.TimerListScreen
 import kotlinx.coroutines.launch
@@ -60,16 +63,18 @@ import kotlinx.coroutines.launch
 private const val ROUTE_TABS = "tabs"
 private const val ROUTE_SETTINGS = "settings"
 
-/** Clock first, per the reordering the user asked for. */
+/** Clock first, per the reordering the user asked for. [addLabelRes] is null for tabs with no
+ * "add" concept (Stopwatch) — the shared FAB just doesn't render on those. */
 private enum class Tab(
     val labelRes: Int,
-    val addLabelRes: Int,
+    val addLabelRes: Int?,
     val filledIcon: ImageVector,
     val outlinedIcon: ImageVector,
 ) {
     CLOCK(R.string.tab_clock, R.string.add_timezone, Icons.Filled.AccessTime, Icons.Outlined.AccessTime),
     ALARMS(R.string.tab_alarms, R.string.add_alarm, Icons.Filled.Alarm, Icons.Outlined.Alarm),
     TIMERS(R.string.tab_timers, R.string.add_timer, Icons.Filled.Timer, Icons.Outlined.Timer),
+    STOPWATCH(R.string.tab_stopwatch, null, Icons.Filled.AvTimer, Icons.Outlined.AvTimer),
 }
 
 class MainActivity : ComponentActivity() {
@@ -86,7 +91,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             HaAlarmClockTheme {
                 val navController = rememberNavController()
-                // Only Tabs <-> Settings is a real navigation; switching between the three tabs
+                // Only Tabs <-> Settings is a real navigation; switching between the four tabs
                 // themselves is a HorizontalPager, not a nav-graph destination — see TabsScreen. A
                 // fade here showed a visible artifact that a plain instant cut can't: with no
                 // animated frames at all, there's nothing for a partial-alpha blend to go wrong on.
@@ -164,12 +169,16 @@ private fun TabsScreen(onOpenSettings: () -> Unit) {
             }
         },
         floatingActionButton = {
-            // Also shared and fixed in place; only its label tracks the current page.
-            ExtendedFloatingActionButton(
-                onClick = { pendingAddPage = pagerState.currentPage },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text(stringResource(currentTab.addLabelRes)) },
-            )
+            // Also shared and fixed in place; only its label tracks the current page. Tabs with
+            // no "add" concept (Stopwatch) have a null addLabelRes, so nothing renders there
+            // instead of repurposing this FAB for something unrelated.
+            currentTab.addLabelRes?.let { addLabelRes ->
+                ExtendedFloatingActionButton(
+                    onClick = { pendingAddPage = pagerState.currentPage },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text(stringResource(addLabelRes)) },
+                )
+            }
         },
     ) { innerPadding ->
         HorizontalPager(
@@ -189,6 +198,7 @@ private fun TabsScreen(onOpenSettings: () -> Unit) {
                     showAddDialog = pendingAddPage == page,
                     onAddDialogDismiss = { pendingAddPage = null },
                 )
+                Tab.STOPWATCH -> StopwatchScreen()
             }
         }
     }

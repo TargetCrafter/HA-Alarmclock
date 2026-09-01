@@ -34,6 +34,7 @@ const val NOTIFICATION_CHANNEL_ALARM = "alarm_ringing"
 const val NOTIFICATION_CHANNEL_SYNC = "ha_sync"
 const val NOTIFICATION_CHANNEL_UPCOMING = "upcoming_alarm"
 const val NOTIFICATION_CHANNEL_TIMER = "timer"
+const val NOTIFICATION_CHANNEL_WIDGET_TICKER = "widget_ticker"
 
 class HaAlarmClockApp : Application() {
 
@@ -120,6 +121,13 @@ class HaAlarmClockApp : Application() {
                 getString(R.string.notification_channel_timer),
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply { setBypassDnd(true) },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                NOTIFICATION_CHANNEL_WIDGET_TICKER,
+                getString(R.string.notification_channel_widget_ticker),
+                NotificationManager.IMPORTANCE_MIN,
+            ),
         )
     }
 

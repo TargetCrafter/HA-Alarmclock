@@ -29,6 +29,6 @@ class BootReceiver : BroadcastReceiver() {
         }
         startHaSyncServiceIfConfigured(context)
 
-        if (AnalogWidgetTicker.hasAnyInstance(context)) AnalogWidgetTicker.scheduleNextTick(context)
+        AnalogWidgetTicker.ensureRunning(context)
     }
 }
