@@ -111,10 +111,16 @@ alarm for you).
   reach; the lap list in between expands with `Modifier.weight(1f)` to fill whatever
   space is left, which is what pushes the buttons down. The Lap/Reset button switches
   meaning with state — Lap while running, Reset once paused (disabled at a fresh
-  `00:00.000`, since there's nothing to reset yet). Laps list newest-first, each showing
-  both its own split and the cumulative total at that point. `StopwatchViewModel` times
-  off `SystemClock.elapsedRealtime()` rather than
-  `System.currentTimeMillis()`, so it can't jump if the wall clock changes mid-run (NTP
+  `00:00.000`, since there's nothing to reset yet). Laps are stored newest-first (a new
+  one is prepended in `StopwatchViewModel`), each showing both its own split and the
+  cumulative total at that point; the `LazyColumn` renders them with
+  `reverseLayout = true`, so the latest lap sits at the bottom of the list and is always
+  the one in view without scrolling — a plain top-down list would instead auto-adjust
+  scroll to keep whatever was already visible (Lap 1) pinned in place forever as new laps
+  get prepended above it, which is a documented Compose `LazyColumn` behavior, not a bug
+  in how the laps were sorted. `StopwatchViewModel` times off
+  `SystemClock.elapsedRealtime()` rather than `System.currentTimeMillis()`, so it can't
+  jump if the wall clock changes mid-run (NTP
   sync, timezone, DST, the user editing the time). It's a plain `ViewModel`, not backed
   by a foreground service or `AlarmManager` — a stopwatch has no completion to notify
   about, unlike a timer, so there's nothing worth a permanent notification for; it keeps

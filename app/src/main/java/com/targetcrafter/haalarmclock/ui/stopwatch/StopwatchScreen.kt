@@ -66,7 +66,14 @@ fun StopwatchScreen() {
                     )
                 }
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                // reverseLayout, not a data re-sort: laps is already newest-first (index 0 is the
+                // latest), and LazyColumn auto-adjusts scroll to keep whatever was already visible
+                // in view when new items are inserted above it — with a plain top-down list that
+                // pins Lap 1 in place forever as new laps get prepended above it. reverseLayout
+                // flips which end is the default-visible anchor, so newest-first data renders
+                // oldest-at-top/newest-at-bottom and each new lap lands right in the anchored,
+                // already-visible spot instead.
+                LazyColumn(modifier = Modifier.fillMaxSize(), reverseLayout = true) {
                     items(laps, key = { it.number }) { lap ->
                         ListItem(
                             headlineContent = { Text("Lap ${lap.number}") },
