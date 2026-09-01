@@ -96,18 +96,24 @@ alarm for you).
   app-local only, never synced to HA. World clock rows stay plain digital text
   (`HH:mm` + a "tomorrow"/"yesterday" note when the date differs) regardless of that
   setting; only the big local-time display switches style. The analog face is drawn
-  live with Compose's `Canvas` (`ui/clock/AnalogClockFace.kt`), including a red second
-  hand and pivot dot — the one place in the app seconds are shown continuously, and the
-  only part of the face that isn't theme-driven, deliberately, to read like a real
-  clock's second hand.
-- **The Stopwatch tab counts up in `MM:SS.mmm`** with Start/Pause(Resume) and a
-  Lap/Reset button that switches meaning with state — Lap while running, Reset once
-  paused (disabled at a fresh `00:00.000`, since there's nothing to reset yet), both
-  full-width 96dp-tall buttons (`StopwatchButton` in `StopwatchScreen.kt`) — the same
-  height as the fullscreen ringing screen's Dismiss/Snooze, since these controls are the
-  whole point of the screen and worth being able to hit by feel. Laps list newest-first,
-  each showing both its own split and the cumulative total at that point.
-  `StopwatchViewModel` times off `SystemClock.elapsedRealtime()` rather than
+  live with Compose's `Canvas` (`ui/clock/AnalogClockFace.kt`), styled to match the
+  home-screen widget's face (see below): a filled disc (default
+  `MaterialTheme.colorScheme.surfaceContainerHigh`, theme-adaptive rather than the
+  widget's fixed color) with a bezel ring, uniform dimmed tick marks with the four
+  quarter ones drawn longer, and a red second hand with a two-tone white-halo/red-center
+  pivot dot — the one place in the app seconds are shown continuously, and the only part
+  of the face that isn't theme-driven, deliberately, to read like a real clock's second
+  hand.
+- **The Stopwatch tab counts up in `MM:SS.mmm`**, with the time display pinned at the
+  top and Start/Pause(Resume) plus a Lap/Reset button — full-width 96dp-tall buttons
+  (`StopwatchButton` in `StopwatchScreen.kt`), the same height as the fullscreen ringing
+  screen's Dismiss/Snooze — pinned at the very *bottom* instead, within easy one-handed
+  reach; the lap list in between expands with `Modifier.weight(1f)` to fill whatever
+  space is left, which is what pushes the buttons down. The Lap/Reset button switches
+  meaning with state — Lap while running, Reset once paused (disabled at a fresh
+  `00:00.000`, since there's nothing to reset yet). Laps list newest-first, each showing
+  both its own split and the cumulative total at that point. `StopwatchViewModel` times
+  off `SystemClock.elapsedRealtime()` rather than
   `System.currentTimeMillis()`, so it can't jump if the wall clock changes mid-run (NTP
   sync, timezone, DST, the user editing the time). It's a plain `ViewModel`, not backed
   by a foreground service or `AlarmManager` — a stopwatch has no completion to notify
@@ -146,6 +152,12 @@ alarm for you).
   their variants); `ClockWidgetUpdater` just skips the `setBackgroundColor` call for
   them, leaving the wallpaper showing through behind the analog widget's circle or the
   digital widget's text, with no rectangle behind either.
+- The digital widget's next-alarm `TextView` is `match_parent` width with
+  `android:gravity="center"` and up to 2 lines, not `wrap_content` — it used to be
+  `wrap_content` with no width tied to its parent, so a long unbroken alarm label could
+  inflate the whole `LinearLayout`'s measured width past the widget's actual bounds,
+  pushing the time display above it out of view too, not just the alarm line itself.
+  Now a long label wraps within the widget's real width instead.
 - The digital widgets' `TextClock` still ticks on its own with no code involved; the
   analog widgets' face used to be the system `android.widget.AnalogClock`, but that
   rendered blank in practice (and, being a fixed system drawable, couldn't be

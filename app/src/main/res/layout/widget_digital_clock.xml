@@ -18,11 +18,12 @@
 
     <TextView
         android:id="@+id/widget_next_alarm"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:textSize="13sp"
-        android:maxLines="1"
+        android:gravity="center"
+        android:maxLines="2"
         android:ellipsize="end" />
 
 </LinearLayout>

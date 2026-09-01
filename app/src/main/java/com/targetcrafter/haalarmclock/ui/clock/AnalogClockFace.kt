@@ -3,6 +3,7 @@ package com.targetcrafter.haalarmclock.ui.clock
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -20,31 +21,44 @@ import kotlin.math.sin
  */
 val ANALOG_CLOCK_SECOND_HAND_COLOR = Color(0xFFE53935)
 
-/** A live analog clock face drawn with Compose's [Canvas] — the in-app counterpart to
- * [com.targetcrafter.haalarmclock.widget.AnalogClockRenderer], which draws the same shape onto a
- * Bitmap for the home-screen widget (Compose can draw directly here, no RemoteViews involved).
+/** A live analog clock face drawn with Compose's [Canvas] — styled to match the home-screen
+ * widget's face (see [com.targetcrafter.haalarmclock.widget.AnalogClockRenderer], which draws the
+ * same shape onto a Bitmap since RemoteViews can't run arbitrary drawing code): a filled disc with
+ * a bezel ring, uniform dimmed tick marks with the four quarter ones (12/3/6/9) drawn longer, and
+ * a two-tone white-halo/red-center pivot dot.
  */
 @Composable
 fun AnalogClockFace(
     time: LocalTime,
     modifier: Modifier = Modifier,
     color: Color = LocalContentColor.current,
+    backgroundColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     accentColor: Color = ANALOG_CLOCK_SECOND_HAND_COLOR,
 ) {
     Canvas(modifier = modifier.aspectRatio(1f)) {
-        val radius = size.minDimension / 2f * 0.9f
+        val half = size.minDimension / 2f
+        val discRadius = half * 0.995f
+        val radius = half * 0.86f
+        val tickOuter = half * 0.91f
 
-        drawCircle(color = color, radius = radius, style = Stroke(width = radius * 0.035f))
+        drawCircle(color = backgroundColor, radius = discRadius)
+
+        val bezelWidth = half * 0.02f
+        drawCircle(
+            color = color.copy(alpha = 0.3f),
+            radius = discRadius - bezelWidth / 2f,
+            style = Stroke(width = bezelWidth),
+        )
 
         for (i in 0 until 12) {
             val angle = Math.toRadians((i * 30 - 90).toDouble())
-            val outer = radius * 0.95f
-            val inner = radius * (if (i % 3 == 0) 0.80f else 0.88f)
+            val isQuarter = i % 3 == 0
+            val inner = tickOuter - half * (if (isQuarter) 0.22f else 0.13f)
             drawLine(
-                color = color,
+                color = color.copy(alpha = 0.55f),
                 start = center + Offset((cos(angle) * inner).toFloat(), (sin(angle) * inner).toFloat()),
-                end = center + Offset((cos(angle) * outer).toFloat(), (sin(angle) * outer).toFloat()),
-                strokeWidth = radius * 0.02f,
+                end = center + Offset((cos(angle) * tickOuter).toFloat(), (sin(angle) * tickOuter).toFloat()),
+                strokeWidth = half * 0.044f,
                 cap = StrokeCap.Round,
             )
         }
@@ -64,10 +78,11 @@ fun AnalogClockFace(
         val minuteFraction = (time.minute + time.second / 60.0) / 60.0
         val secondFraction = time.second / 60.0
 
-        hand(hourFraction, radius * 0.5f, radius * 0.05f, color)
-        hand(minuteFraction, radius * 0.75f, radius * 0.03f, color)
-        hand(secondFraction, radius * 0.85f, radius * 0.012f, accentColor)
+        hand(hourFraction, radius * 0.5f, half * 0.09f, color)
+        hand(minuteFraction, radius * 0.75f, half * 0.06f, color)
+        hand(secondFraction, radius * 0.85f, half * 0.024f, accentColor)
 
-        drawCircle(color = accentColor, radius = radius * 0.03f, center = center)
+        drawCircle(color = color, radius = half * 0.09f)
+        drawCircle(color = accentColor, radius = half * 0.048f)
     }
 }
