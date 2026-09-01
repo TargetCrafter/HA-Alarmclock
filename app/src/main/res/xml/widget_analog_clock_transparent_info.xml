@@ -6,7 +6,7 @@
     android:targetCellHeight="2"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/widget_analog_clock"
-    android:previewLayout="@layout/widget_analog_clock"
+    android:previewImage="@drawable/widget_preview_analog"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/widget_analog_clock_transparent_label" />

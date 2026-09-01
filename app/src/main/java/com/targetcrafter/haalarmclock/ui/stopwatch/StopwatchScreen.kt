@@ -3,12 +3,12 @@ package com.targetcrafter.haalarmclock.ui.stopwatch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -22,15 +22,20 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+
+/** Matches the fullscreen ringing screen's button height (see RingingActivity) — the
+ * start/lap controls are the whole point of this screen and worth being able to hit by feel. */
+private val StopwatchButtonHeight = 96.dp
 
 @Composable
 fun StopwatchScreen() {
@@ -41,47 +46,34 @@ fun StopwatchScreen() {
 
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(text = formatStopwatchTime(elapsedMillis), style = MaterialTheme.typography.displayLarge)
             Spacer(modifier = Modifier.height(24.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedButton(
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                StopwatchButton(
+                    onClick = { if (isRunning) viewModel.pause() else viewModel.start() },
+                    icon = if (isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    label = when {
+                        isRunning -> "Pause"
+                        elapsedMillis > 0 -> "Resume"
+                        else -> "Start"
+                    },
+                    containerColor = if (isRunning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primary,
+                    contentColor = if (isRunning) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimary,
+                )
+                StopwatchButton(
                     onClick = { if (isRunning) viewModel.lap() else viewModel.reset() },
                     enabled = isRunning || elapsedMillis > 0,
-                ) {
-                    Icon(
-                        if (isRunning) Icons.Filled.Flag else Icons.Filled.Replay,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 6.dp),
-                    )
-                    Text(if (isRunning) "Lap" else "Reset")
-                }
-                Button(
-                    onClick = { if (isRunning) viewModel.pause() else viewModel.start() },
-                    colors = if (isRunning) {
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        )
-                    } else {
-                        ButtonDefaults.buttonColors()
-                    },
-                ) {
-                    Icon(
-                        if (isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 6.dp),
-                    )
-                    Text(
-                        when {
-                            isRunning -> "Pause"
-                            elapsedMillis > 0 -> "Resume"
-                            else -> "Start"
-                        },
-                    )
-                }
+                    icon = if (isRunning) Icons.Filled.Flag else Icons.Filled.Replay,
+                    label = if (isRunning) "Lap" else "Reset",
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
             }
         }
 
@@ -106,6 +98,27 @@ fun StopwatchScreen() {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StopwatchButton(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    label: String,
+    containerColor: Color,
+    contentColor: Color,
+    enabled: Boolean = true,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().height(StopwatchButtonHeight),
+        shape = MaterialTheme.shapes.large,
+        colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentColor),
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(32.dp))
+        Text(text = label, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 16.dp))
     }
 }
 

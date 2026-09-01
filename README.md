@@ -102,9 +102,12 @@ alarm for you).
   clock's second hand.
 - **The Stopwatch tab counts up in `MM:SS.mmm`** with Start/Pause(Resume) and a
   Lap/Reset button that switches meaning with state — Lap while running, Reset once
-  paused (disabled at a fresh `00:00.000`, since there's nothing to reset yet). Laps
-  list newest-first, each showing both its own split and the cumulative total at that
-  point. `StopwatchViewModel` times off `SystemClock.elapsedRealtime()` rather than
+  paused (disabled at a fresh `00:00.000`, since there's nothing to reset yet), both
+  full-width 96dp-tall buttons (`StopwatchButton` in `StopwatchScreen.kt`) — the same
+  height as the fullscreen ringing screen's Dismiss/Snooze, since these controls are the
+  whole point of the screen and worth being able to hit by feel. Laps list newest-first,
+  each showing both its own split and the cumulative total at that point.
+  `StopwatchViewModel` times off `SystemClock.elapsedRealtime()` rather than
   `System.currentTimeMillis()`, so it can't jump if the wall clock changes mid-run (NTP
   sync, timezone, DST, the user editing the time). It's a plain `ViewModel`, not backed
   by a foreground service or `AlarmManager` — a stopwatch has no completion to notify
@@ -117,10 +120,9 @@ alarm for you).
   options sheet (label, repeat days, vibrate, fade-in, ringtone, snooze duration),
   which opens as a tall bottom sheet with an always-visible floating Save button rather
   than a scrolling screen. Timers get a similarly lightweight add dialog (H/M/S
-  steppers + an optional name). Each timer row's own Pause/Resume/Cancel/Dismiss are
-  full-width, 96dp-tall buttons (`TimerActionButton` in `TimerListScreen.kt`) — the same
-  height as the fullscreen ringing screen's Dismiss/Snooze — so they're easy to hit by
-  feel, not just when awake enough to aim at a small target.
+  steppers + an optional name), and each timer row's own Pause/Resume/Cancel/Dismiss
+  stay their original compact size — a card in a scrollable list of possibly several
+  timers has less room to spare than a screen with only ever one running stopwatch.
 - **Fade-in is on by default.** Alarms ramp from near-silent to full volume over the
   first 45 seconds; toggle it per-alarm in the options sheet.
 - **A snoozed alarm shows a "Snoozed until HH:MM" badge** on its row until it rings
@@ -149,27 +151,37 @@ alarm for you).
   rendered blank in practice (and, being a fixed system drawable, couldn't be
   recolored anyway) — it's now a full "watch face" drawn to a `Bitmap` by hand
   (`AnalogClockRenderer`) and pushed via `RemoteViews.setImageViewBitmap`: a filled disc
-  in the background color, right out to the bitmap's own edge (no ImageView padding
-  either — see `widget_analog_clock.xml`) so the face fills the whole widget, with a
-  subtle bezel ring; twelve dimmed tick marks (`foreground` at ~55% alpha) close to the
-  rim, the four quarter ticks (12/3/6/9) drawn longer than the other eight so the face
-  reads at a glance without numerals; white hour/minute hands; and **a red second hand
-  with a two-tone white-halo/red-center pivot dot** — `ANALOG_CLOCK_SECOND_HAND_COLOR`
-  (Compose) and `AnalogClockRenderer`'s `SECOND_HAND_COLOR` share the same `#E53935` so
-  the app and widget match. This is drawn identically for both the opaque and transparent
-  variant — the disc itself supplies the "face" either way, so the only difference is
-  whether the *surrounding* widget rectangle also gets `appearance.backgroundColor`
-  (opaque) or stays transparent (so only the circle shows against the wallpaper).
-- **When there's a next alarm, a centered badge — the Material "alarm" glyph (rasterized
-  from `R.drawable.ic_alarm_glyph` and tinted at runtime, the one non-Canvas-primitive
-  element in the renderer) plus its bare `HH:mm` (no "Next:" prefix or label; the glyph
-  already says "alarm") — sits just below the pivot,** backed by an opaque patch in the
-  same background color as the disc, painted *after* the hands so any hand passing behind
-  the badge is cleanly masked out rather than a line poking through between the glyphs.
-  No badge is drawn at all when there's no next alarm. The digital widgets keep their own
-  separate next-alarm text row underneath the time (still `Next: <label> · HH:mm`, hidden
-  when there's no alarm) — only the analog badge was redesigned to sit
-  centered-and-masked into the face.
+  in the background color with a subtle bezel ring; twelve dimmed tick marks
+  (`foreground` at ~55% alpha) close to the rim, the four quarter ticks (12/3/6/9) drawn
+  longer than the other eight so the face reads at a glance without numerals; white
+  hour/minute hands; and **a red second hand with a two-tone white-halo/red-center pivot
+  dot** — `ANALOG_CLOCK_SECOND_HAND_COLOR` (Compose) and `AnalogClockRenderer`'s
+  `SECOND_HAND_COLOR` share the same `#E53935` so the app and widget match. The bitmap
+  itself is identical for both variants — the disc supplies the "face" either way — but
+  `ClockWidgetUpdater` gives the `ImageView` an 8dp `setViewPadding` on the opaque variant
+  only, so the circle keeps a little breathing room inside its own rectangle, while the
+  transparent variant (no rectangle to breathe against) fills the widget bounds right out
+  to the edge.
+- **When there's a next alarm, a centered badge — the Material "alarm" glyph (a clock
+  face with bell "ears" and a hand inside, from `R.drawable.ic_alarm_glyph`, rasterized
+  and tinted at runtime — the one non-Canvas-primitive element in the renderer; an
+  earlier version reused the app icon's bell-with-cutout glyph, which read as Fluent
+  rather than Material style) plus its bare `HH:mm` (no "Next:" prefix or label; the
+  glyph already says "alarm") — sits just below the pivot,** backed by an opaque patch in
+  the same background color as the disc, painted *after* the hands so any hand passing
+  behind the badge is cleanly masked out rather than a line poking through between the
+  glyphs. No badge is drawn at all when there's no next alarm. The digital widgets keep
+  their own separate next-alarm text row underneath the time (still
+  `Next: <label> · HH:mm`, hidden when there's no alarm) — only the analog badge was
+  redesigned to sit centered-and-masked into the face.
+- **The analog widgets have a static `previewImage`** (`drawable-nodpi/widget_preview_analog.png`,
+  a 10:10 rendering of the same design at default colors) **instead of a live
+  `previewLayout`**, so the system widget picker actually shows something — the picker
+  only ever inflates the layout XML statically, and `widget_analog_clock.xml`'s
+  `ImageView` has no default `android:src` (its content only ever exists as a bitmap
+  pushed at runtime via code), so a `previewLayout` there rendered as a blank circle. The
+  digital widget didn't need this fix since its `TextClock` renders real ticking content
+  even in a statically-inflated preview.
 - **Redrawing it every second — so the second hand actually moves — needs a foreground
   service (`AnalogWidgetTickerService`), not just `AlarmManager`.** An `AlarmManager`
   trigger (even the Doze-surviving `setExactAndAllowWhileIdle`) is what the first version

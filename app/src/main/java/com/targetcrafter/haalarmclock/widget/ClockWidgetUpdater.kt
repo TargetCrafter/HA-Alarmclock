@@ -91,10 +91,16 @@ object ClockWidgetUpdater {
         val ids = manager.getAppWidgetIds(ComponentName(context, provider))
         if (ids.isEmpty()) return
 
+        // The opaque variant keeps a little breathing room between the circular face and its own
+        // rectangle's edges; the transparent variant has no rectangle to breathe against, so its
+        // face fills the widget bounds right out to the edge instead.
+        val facePadding = if (applyBackground) (8 * context.resources.displayMetrics.density).toInt() else 0
+
         for (id in ids) {
             val views = RemoteViews(context.packageName, R.layout.widget_analog_clock)
             applyCommon(context, views, appearance, applyBackground)
             views.setImageViewBitmap(R.id.widget_analog_face, face)
+            views.setViewPadding(R.id.widget_analog_face, facePadding, facePadding, facePadding, facePadding)
             manager.updateAppWidget(id, views)
         }
     }
