@@ -137,15 +137,24 @@ alarm for you).
 - The digital widgets' `TextClock` still ticks on its own with no code involved; the
   analog widgets' face used to be the system `android.widget.AnalogClock`, but that
   rendered blank in practice (and, being a fixed system drawable, couldn't be
-  recolored anyway) — it's now drawn to a `Bitmap` by hand (`AnalogClockRenderer`,
-  matching the same proportions as the in-app Clock tab's `AnalogClockFace`: same tick
-  marks, same hour/minute hand lengths, and now also **a red second hand and pivot dot**
-  on both — `ANALOG_CLOCK_SECOND_HAND_COLOR`/`AnalogClockRenderer`'s
-  `SECOND_HAND_COLOR` share the same `#E53935` so the app and the widget match) and
-  pushed via `RemoteViews.setImageViewBitmap`. The transparent variant's bitmap also
-  bakes in a filled circle behind the face in the current background color, so it still
-  reads as a clock face sitting on the wallpaper rather than bare hands, without the
-  rectangle the opaque variant already gets from the widget's own background.
+  recolored anyway) — it's now a full "watch face" drawn to a `Bitmap` by hand
+  (`AnalogClockRenderer`) and pushed via `RemoteViews.setImageViewBitmap`: a filled disc
+  in the background color with a subtle bezel ring, twelve uniform dimmed tick marks
+  (`foreground` at ~55% alpha), white hour/minute hands, and **a red second hand with a
+  two-tone white-halo/red-center pivot dot** — `ANALOG_CLOCK_SECOND_HAND_COLOR` (Compose)
+  and `AnalogClockRenderer`'s `SECOND_HAND_COLOR` share the same `#E53935` so the app and
+  widget match. This is drawn identically for both the opaque and transparent variant —
+  the disc itself supplies the "face" either way, so the only difference is whether the
+  *surrounding* widget rectangle also gets `appearance.backgroundColor` (opaque) or stays
+  transparent (so only the circle shows against the wallpaper).
+- **When there's a next alarm, a centered badge — an alarm-bell glyph plus its bare
+  `HH:mm` (no "Next:" prefix or label; the glyph already says "alarm") — sits just below
+  the pivot,** backed by an opaque patch in the same background color as the disc,
+  painted *after* the hands so any hand passing behind the badge is cleanly masked out
+  rather than a line poking through between the glyphs. No badge is drawn at all when
+  there's no next alarm. The digital widgets keep their own separate next-alarm text row
+  underneath the time (still `Next: <label> · HH:mm`, hidden when there's no alarm) —
+  only the analog badge was redesigned to sit centered-and-masked into the face.
 - **Redrawing it every second — so the second hand actually moves — needs a foreground
   service (`AnalogWidgetTickerService`), not just `AlarmManager`.** An `AlarmManager`
   trigger (even the Doze-surviving `setExactAndAllowWhileIdle`) is what the first version
@@ -161,12 +170,12 @@ alarm for you).
   `onEnabled`/`onUpdate`/after reboot, and from `onDisabled`, tracking both analog
   provider variants together since a provider's own `onDisabled` only fires when *that
   specific* provider's last instance is removed, not the other variant's.
-- **The analog widget's clock face is now full-bleed** (a `FrameLayout` with the
-  `ImageView` filling the whole widget) **instead of being squeezed above a fixed text
-  row**, so it's noticeably bigger; the next-alarm line now overlays near the bottom of
-  the face instead of taking up its own row underneath it. Both widgets — analog and
-  digital, opaque and transparent — now also hide that line entirely when there's no
-  next alarm at all, instead of a permanent "No alarm set" placeholder.
+- **The analog widget's clock face is full-bleed** (a `FrameLayout` with the `ImageView`
+  filling the whole widget, `widget_analog_clock.xml` no longer has a separate text
+  view at all — the badge above is baked into the bitmap instead) **instead of being
+  squeezed above a fixed text row**, so it's noticeably bigger. The digital widget's
+  next-alarm row is likewise hidden entirely when there's no next alarm, instead of a
+  permanent "No alarm set" placeholder.
 - A since-removed "dynamic launcher icon" feature was also found to be crashing the app
   on every launch (`PackageManager.setComponentEnabledSetting` on an `activity-alias`
   failing inside an uncaught coroutine, fixed by removing that feature and giving
@@ -182,14 +191,16 @@ alarm for you).
   foreground (hands/text) color, each pickable from a preset swatch row or typed as a
   hex code, applied live via `RemoteViews.setInt(..., "setBackgroundColor", ...)` /
   `setTextColor`/the bitmap renderer (the transparent variants still honor the
-  foreground color, just never the background one). Default is grayscale (`#2E2E2E`
-  background, `#E8E8E8` foreground) so the opaque widgets blend into as many
-  wallpapers/launchers as possible out of the box; a "Reset to default" button restores
-  that. One caveat: because the color is applied as a plain `ColorDrawable`, the opaque
-  widgets lose their rounded corners on Android 11 and below — Android 12+ launchers
-  round/clip every widget's outer bounds automatically regardless of its own
-  background, so this only matters pre-12 (moot for the transparent variants, which
-  have no rectangle to round in the first place).
+  foreground color, just never the background one on the surrounding rectangle — the
+  analog disc itself is always filled with the background color, on both variants).
+  Default is near-black on off-white (`#1B1B1B` background, `#E8E8E8` foreground),
+  matching a fairly typical dark watch face rather than the mid-grey used before; a
+  "Reset to default" button restores that. One caveat: because the *rectangle's* color
+  is applied as a plain `ColorDrawable`, the opaque widgets lose their rounded corners
+  on Android 11 and below — Android 12+ launchers round/clip every widget's outer bounds
+  automatically regardless of its own background, so this only matters pre-12 (moot for
+  the analog widgets' own circular face either way, and for the transparent variants'
+  rectangle, which has no fill to round in the first place).
 - Uses plain `MaterialTheme` on stable `material3` (pinned to `1.4.0` in
   `gradle/libs.versions.toml`, overriding the Compose BOM's own suggestion, which
   currently maps to an older 1.3.x). Material 3 Expressive's actual theme wrapper

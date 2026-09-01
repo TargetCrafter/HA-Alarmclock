@@ -4,6 +4,9 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- The next-alarm indicator is baked directly into the bitmap (see AnalogClockRenderer) so
+         it can sit centered on the face with an opaque patch masking the hands behind it — not
+         achievable with a separate RemoteViews TextView layered on top. -->
     <ImageView
         android:id="@+id/widget_analog_face"
         android:layout_width="match_parent"
@@ -11,15 +14,5 @@
         android:padding="8dp"
         android:contentDescription="@null"
         android:scaleType="fitCenter" />
-
-    <TextView
-        android:id="@+id/widget_next_alarm"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="14dp"
-        android:textSize="12sp"
-        android:maxLines="1"
-        android:ellipsize="end" />
 
 </FrameLayout>

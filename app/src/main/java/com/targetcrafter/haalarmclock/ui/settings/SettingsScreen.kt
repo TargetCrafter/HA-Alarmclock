@@ -72,7 +72,7 @@ import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.appViewModelFactory
 
 private val PRESET_COLORS = listOf(
-    0xFF2E2E2E.toInt(), // dark grey (default widget background)
+    0xFF1B1B1B.toInt(), // near-black (default widget background)
     0xFFE8E8E8.toInt(), // light grey (default widget foreground)
     0xFF000000.toInt(),
     0xFFFFFFFF.toInt(),

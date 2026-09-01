@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** Grayscale by default so the widgets blend into as many home screens/wallpapers as possible;
  * both are ARGB [android.graphics.Color] ints. */
-const val DEFAULT_WIDGET_BACKGROUND: Int = 0xFF2E2E2E.toInt()
+const val DEFAULT_WIDGET_BACKGROUND: Int = 0xFF1B1B1B.toInt()
 const val DEFAULT_WIDGET_FOREGROUND: Int = 0xFFE8E8E8.toInt()
 
 data class WidgetAppearance(

@@ -22,11 +22,12 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Pushes the current appearance (colors) and the "Next: HH:mm" line into every clock widget
- * instance — both the normal (background-filled) and transparent (no-background) variant of
- * each. The digital widgets' [android.widget.TextClock] ticks on its own; the analog widgets'
- * face is redrawn here (see [AnalogClockRenderer]) and needs a fresh push every tick — see
- * [AnalogWidgetTicker] for what drives that.
+ * Pushes the current appearance (colors) and next-alarm info into every clock widget instance —
+ * both the normal (background-filled) and transparent (no-background) variant of each. The
+ * digital widgets' [android.widget.TextClock] ticks on its own and show next-alarm info as a
+ * separate text row; the analog widgets' whole face — including a centered next-alarm badge, see
+ * [AnalogClockRenderer] — is redrawn here as one bitmap and needs a fresh push every tick (see
+ * [AnalogWidgetTicker] for what drives that).
  */
 object ClockWidgetUpdater {
 
@@ -35,24 +36,22 @@ object ClockWidgetUpdater {
         val alarms = app.repository.alarms.first()
         val appearance = app.widgetAppearanceStore.appearance.first()
         val next = alarms.filter { it.enabled }.minByOrNull { it.nextTriggerAtMillis() }
-        val label = next?.let { formatNextAlarm(context, it) }
 
         val manager = AppWidgetManager.getInstance(context)
-        updateDigitalWidgets(context, manager, appearance, label, DigitalClockWidgetProvider::class.java, applyBackground = true)
-        updateDigitalWidgets(context, manager, appearance, label, DigitalClockTransparentWidgetProvider::class.java, applyBackground = false)
+        val digitalLabel = next?.let { formatNextAlarmWithLabel(context, it) }
+        updateDigitalWidgets(context, manager, appearance, digitalLabel, DigitalClockWidgetProvider::class.java, applyBackground = true)
+        updateDigitalWidgets(context, manager, appearance, digitalLabel, DigitalClockTransparentWidgetProvider::class.java, applyBackground = false)
 
+        // The analog badge shows a bare time next to an alarm-bell glyph — the glyph already says
+        // "alarm", so unlike the digital widget's line, no "Next:" prefix or alarm label is shown.
+        val analogTime = next?.let { formatTimeOnly(it) }
         val now = LocalTime.now()
-        // The transparent variant bakes a circular disc behind the face right into the bitmap
-        // (see AnalogClockRenderer) so it still reads as a clock rather than bare hands on the
-        // wallpaper — the opaque variant already gets that from the widget's own rectangle, so it
-        // renders without one, meaning the two variants need separately rendered bitmaps.
-        val opaqueFace = AnalogClockRenderer.render(now.hour, now.minute, now.second, appearance.foregroundColor)
-        val transparentFace = AnalogClockRenderer.render(
-            now.hour, now.minute, now.second, appearance.foregroundColor,
-            backgroundCircleColor = appearance.backgroundColor,
+        val face = AnalogClockRenderer.render(
+            now.hour, now.minute, now.second,
+            appearance.foregroundColor, appearance.backgroundColor, analogTime,
         )
-        updateAnalogWidgets(context, manager, appearance, label, opaqueFace, AnalogClockWidgetProvider::class.java, applyBackground = true)
-        updateAnalogWidgets(context, manager, appearance, label, transparentFace, AnalogClockTransparentWidgetProvider::class.java, applyBackground = false)
+        updateAnalogWidgets(context, manager, appearance, face, AnalogClockWidgetProvider::class.java, applyBackground = true)
+        updateAnalogWidgets(context, manager, appearance, face, AnalogClockTransparentWidgetProvider::class.java, applyBackground = false)
     }
 
     private fun updateDigitalWidgets(
@@ -68,7 +67,14 @@ object ClockWidgetUpdater {
 
         for (id in ids) {
             val views = RemoteViews(context.packageName, R.layout.widget_digital_clock)
-            applyCommon(context, views, appearance, nextAlarmLabel, applyBackground)
+            applyCommon(context, views, appearance, applyBackground)
+            if (nextAlarmLabel != null) {
+                views.setViewVisibility(R.id.widget_next_alarm, View.VISIBLE)
+                views.setTextViewText(R.id.widget_next_alarm, nextAlarmLabel)
+                views.setTextColor(R.id.widget_next_alarm, withAlpha(appearance.foregroundColor, 0.7f))
+            } else {
+                views.setViewVisibility(R.id.widget_next_alarm, View.GONE)
+            }
             views.setTextColor(R.id.widget_digital_time, appearance.foregroundColor)
             manager.updateAppWidget(id, views)
         }
@@ -78,7 +84,6 @@ object ClockWidgetUpdater {
         context: Context,
         manager: AppWidgetManager,
         appearance: WidgetAppearance,
-        nextAlarmLabel: String?,
         face: Bitmap,
         provider: Class<out AppWidgetProvider>,
         applyBackground: Boolean,
@@ -88,34 +93,18 @@ object ClockWidgetUpdater {
 
         for (id in ids) {
             val views = RemoteViews(context.packageName, R.layout.widget_analog_clock)
-            applyCommon(context, views, appearance, nextAlarmLabel, applyBackground)
+            applyCommon(context, views, appearance, applyBackground)
             views.setImageViewBitmap(R.id.widget_analog_face, face)
             manager.updateAppWidget(id, views)
         }
     }
 
-    private fun applyCommon(
-        context: Context,
-        views: RemoteViews,
-        appearance: WidgetAppearance,
-        nextAlarmLabel: String?,
-        applyBackground: Boolean,
-    ) {
+    private fun applyCommon(context: Context, views: RemoteViews, appearance: WidgetAppearance, applyBackground: Boolean) {
         // Losing the widget's rounded corners on API < 31 is the tradeoff for user-choosable
         // colors here — see the widget layouts, which no longer carry a static shape background.
         // API 31+ launchers clip/round every widget's outer bounds automatically regardless.
         // The transparent variants skip this entirely, leaving the wallpaper showing through.
         views.setInt(R.id.widget_root, "setBackgroundColor", if (applyBackground) appearance.backgroundColor else Color.TRANSPARENT)
-        if (nextAlarmLabel != null) {
-            views.setViewVisibility(R.id.widget_next_alarm, View.VISIBLE)
-            views.setTextViewText(R.id.widget_next_alarm, nextAlarmLabel)
-            views.setTextColor(R.id.widget_next_alarm, withAlpha(appearance.foregroundColor, 0.7f))
-        } else {
-            // No alarm set at all — leaving a permanent "No alarm set" placeholder just added
-            // clutter, and for the analog widget it now overlays the clock face directly, so an
-            // unnecessary line there is more noticeable than it used to be below the face.
-            views.setViewVisibility(R.id.widget_next_alarm, View.GONE)
-        }
         views.setOnClickPendingIntent(
             R.id.widget_root,
             PendingIntent.getActivity(
@@ -132,9 +121,11 @@ object ClockWidgetUpdater {
         return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
     }
 
-    private fun formatNextAlarm(context: Context, alarm: Alarm): String {
-        val time = DateTimeFormatter.ofPattern("HH:mm")
-            .format(Instant.ofEpochMilli(alarm.nextTriggerAtMillis()).atZone(ZoneId.systemDefault()))
+    private fun formatTimeOnly(alarm: Alarm): String =
+        DateTimeFormatter.ofPattern("HH:mm").format(Instant.ofEpochMilli(alarm.nextTriggerAtMillis()).atZone(ZoneId.systemDefault()))
+
+    private fun formatNextAlarmWithLabel(context: Context, alarm: Alarm): String {
+        val time = formatTimeOnly(alarm)
         val withLabel = if (alarm.label.isBlank()) time else "${alarm.label} · $time"
         return context.getString(R.string.widget_next_alarm, withLabel)
     }
