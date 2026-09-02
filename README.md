@@ -102,6 +102,10 @@ alarm for you).
   involved. The search matches either field, and each result's country name (when it has
   one — fixed-offset/`Etc/...` zones and UTC don't) shows as a subtitle so a
   country-name search with several matches (e.g. "United States") is easy to tell apart.
+  Each row also has leading up/down arrows (`WorldClockStore.moveUp`/`moveDown`, disabled
+  at the top/bottom of the list) to reorder the list — plain tap targets rather than
+  drag-and-drop, since there's no way to compile-check a hand-rolled drag gesture in this
+  sandbox and a couple of taps is little extra friction for what's normally a short list.
   World clock rows stay plain digital text
   (`HH:mm` + a "tomorrow"/"yesterday" note when the date differs) regardless of that
   setting; only the big local-time display switches style. The analog face is drawn

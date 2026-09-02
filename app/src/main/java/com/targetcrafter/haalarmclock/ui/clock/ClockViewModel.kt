@@ -17,4 +17,8 @@ class ClockViewModel(
     fun addZone(zoneId: String) = worldClockStore.add(zoneId)
 
     fun removeZone(zoneId: String) = worldClockStore.remove(zoneId)
+
+    fun moveZoneUp(zoneId: String) = worldClockStore.moveUp(zoneId)
+
+    fun moveZoneDown(zoneId: String) = worldClockStore.moveDown(zoneId)
 }

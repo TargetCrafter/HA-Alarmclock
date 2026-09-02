@@ -15,6 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -91,8 +93,16 @@ fun ClockScreen(showAddDialog: Boolean, onAddDialogDismiss: () -> Unit) {
                 modifier = Modifier.padding(24.dp),
             )
         } else {
-            for (zoneId in zoneIds) {
-                WorldClockRow(zoneId = zoneId, now = now, onRemove = { viewModel.removeZone(zoneId) })
+            zoneIds.forEachIndexed { index, zoneId ->
+                WorldClockRow(
+                    zoneId = zoneId,
+                    now = now,
+                    canMoveUp = index > 0,
+                    canMoveDown = index < zoneIds.lastIndex,
+                    onMoveUp = { viewModel.moveZoneUp(zoneId) },
+                    onMoveDown = { viewModel.moveZoneDown(zoneId) },
+                    onRemove = { viewModel.removeZone(zoneId) },
+                )
             }
         }
     }
@@ -127,7 +137,15 @@ private fun LocalTimeHero(now: ZonedDateTime, style: ClockStyle, modifier: Modif
 }
 
 @Composable
-private fun WorldClockRow(zoneId: String, now: ZonedDateTime, onRemove: () -> Unit) {
+private fun WorldClockRow(
+    zoneId: String,
+    now: ZonedDateTime,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onRemove: () -> Unit,
+) {
     val zoneTime = remember(zoneId, now) { now.withZoneSameInstant(ZoneId.of(zoneId)) }
     val dayOffset = ChronoUnit.DAYS.between(now.toLocalDate(), zoneTime.toLocalDate())
     val subtitle = when {
@@ -136,6 +154,18 @@ private fun WorldClockRow(zoneId: String, now: ZonedDateTime, onRemove: () -> Un
         else -> zoneId
     }
     ListItem(
+        leadingContent = {
+            // Up/down instead of drag-and-drop — a couple of taps to reorder a short list of
+            // world clocks, with no gesture-detection code to get wrong.
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move up")
+                }
+                IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move down")
+                }
+            }
+        },
         headlineContent = { Text(zoneId.substringAfterLast('/').replace('_', ' ')) },
         supportingContent = { Text(subtitle) },
         trailingContent = {
