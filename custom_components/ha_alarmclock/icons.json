@@ -1,0 +1,7 @@
+{
+  "services": {
+    "create_alarm": {
+      "service": "mdi:alarm-plus"
+    }
+  }
+}

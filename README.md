@@ -299,7 +299,14 @@ custom_components/ha_alarmclock/   Home Assistant custom integration (Python)
   assist.py       the create_alarm service + intent handler for Assist
   services.yaml, custom_sentences/en/   service field docs; Assist sentence patterns
   config_flow.py  single-step "confirm setup" flow (no secrets collected on the HA side)
+  icons.json      icon for the create_alarm service in HA's UI (entity icons are still
+                  set in code via _attr_icon)
   binary_sensor.py, sensor.py, switch.py, button.py   the entities themselves
+
+brands/custom_integrations/ha_alarmclock/   the integration's icon, at the sizes
+  home-assistant/brands requires. Home Assistant resolves integration icons from that
+  repo by domain rather than from this one, so these are staged here to be submitted
+  as a PR there — see brands/README.md.
 ```
 
 ## Setting up the Home Assistant side

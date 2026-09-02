@@ -1,0 +1,30 @@
+name: Validate
+
+# HACS and Home Assistant both validate a custom integration's structure and manifest. Running
+# their own actions here means a problem shows up as a failed check rather than as a rejected
+# HACS submission (or a broken install for whoever added the repository).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Both actions validate against requirements that change on Home Assistant's release cadence,
+    # so a repo that passed at publish time can start failing without anything here changing.
+    - cron: "0 4 * * 1"
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration
