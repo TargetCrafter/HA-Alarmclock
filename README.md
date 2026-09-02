@@ -1,11 +1,166 @@
 # HA Alarm Clock
 
-An Android alarm clock and timer app that works fully offline like the stock Clock
-app, with a world-clock tab and recolorable analog/digital home-screen widgets, and
-optionally connects directly to Home Assistant — via a custom integration, no MQTT
-broker required — so you can build automations around your alarms and timers (e.g.
-turn on lights when an alarm rings, let HA snooze/dismiss it, or ask Assist to set an
-alarm for you).
+An Android alarm clock, timer, stopwatch and world clock that works completely offline —
+and, if you want it to, tells Home Assistant about your alarms so you can automate around
+them.
+
+It comes in two parts:
+
+- **The Android app.** A full alarm clock in its own right. It never needs Home Assistant,
+  a network connection, or an account to work.
+- **The Home Assistant integration** (`custom_components/ha_alarmclock/`). Optional. Add
+  it and your alarms show up in Home Assistant as real entities you can automate on —
+  turn the lights on when the alarm rings, warm the house half an hour before it, dismiss
+  it from a wall tablet, or ask Assist to set one.
+
+The two talk directly to each other over your own Home Assistant's API, using a
+long-lived access token you generate yourself. There's no MQTT broker to run, no cloud
+service in the middle, and nothing leaves your network.
+
+## What you get
+
+### On the phone
+
+- **Alarms** with repeat days, per-alarm labels, ringtone, vibration, and a volume
+  fade-in that ramps up over the first 45 seconds instead of jolting you awake.
+- **A full-screen ringing screen** over the lock screen, with Dismiss/Snooze buttons big
+  enough to hit by feel without your glasses on.
+- **An "alarm in an hour" notification** with a live countdown and a Skip button, so you
+  can call off tomorrow's alarm the moment you realise you don't need it.
+- **Timers** with pause/resume/cancel straight from the notification, and a **stopwatch**
+  with laps.
+- **A world clock tab** — search time zones by country name ("Lebanon" finds
+  `Asia/Beirut`), reorder them how you like, all offline.
+- **Four home-screen widgets**: analog and digital, each with an opaque and a transparent
+  variant, showing your next alarm. Colors are configurable.
+
+### In Home Assistant
+
+Each phone that syncs shows up as its own HA device, with:
+
+| Entity | Type | What it does |
+| --- | --- | --- |
+| **Ringing** | `binary_sensor` | On while an alarm is actually ringing. Attributes: `alarm_id`, `label`, `time` |
+| **Next alarm** | `sensor` (timestamp) | When the soonest enabled alarm across the whole phone will go off. Attributes: `alarm_id`, `label` |
+| One per alarm | `switch` | Turn that alarm on/off from HA. Attributes: `time`, `repeat`, `next_trigger`, `snoozed_until` |
+| One per alarm | `sensor` (timestamp) | When that specific alarm next fires |
+| One per timer | `sensor` (timestamp) | When that timer runs out |
+| **Snooze** / **Dismiss** | `button` | Act on whatever is ringing right now |
+
+Plus a **`ha_alarmclock.create_alarm` service** (fields: `time`, and optionally `label`,
+`repeat`, `device_id`) for creating alarms from automations, scripts, or an LLM agent —
+and built-in Assist sentences so *"set an alarm for 7am"* works out of the box with the
+keyword pipeline, no LLM needed.
+
+State is pushed to Home Assistant the moment it changes — there is no polling anywhere in
+this integration.
+
+## Installing
+
+### 1. The Android app
+
+Download the APK from [Releases](https://github.com/TargetCrafter/HA-Alarmclock/releases)
+and install it. Android 8.0 (API 26) or newer.
+
+You can stop here. Everything in "On the phone" above works with no further setup.
+
+### 2. The Home Assistant integration
+
+**Via HACS** (recommended): HACS → three-dot menu → Custom repositories → add
+`https://github.com/TargetCrafter/HA-Alarmclock` with category **Integration** → install
+it → restart Home Assistant.
+
+**Manually**: copy `custom_components/ha_alarmclock/` into your HA config's
+`custom_components/` directory and restart Home Assistant.
+
+Then: Settings → Devices & Services → **Add Integration** → search "HA Alarm Clock".
+There's nothing to fill in — it just needs adding once, even if you have several phones.
+
+### 3. Connect the app to Home Assistant
+
+1. In Home Assistant, click your name (bottom left) → **Security** tab → create a
+   **Long-Lived Access Token** and copy it.
+2. In the app: three-dot menu → Settings → enter your Home Assistant URL (e.g.
+   `https://homeassistant.local:8123`) and paste the token → turn on sync.
+
+Your phone appears in Home Assistant as a device the first time it pushes. Its entities
+are named after the phone, so `sensor.pixel_8_alarm_clock_next_alarm` and friends.
+
+With more than one phone synced, `create_alarm` needs its `device_id` field to say which
+one to use; with a single phone it's picked automatically.
+
+### 4. Make sure the alarms actually ring
+
+Android's battery optimization can kill a background app before its alarm fires, and it's
+the single most common reason an alarm clock app silently doesn't go off. The app asks you
+to exempt it on launch, and Settings has an **Alarm reliability** section showing anything
+still outstanding. It's worth doing — see [Alarm reliability
+safeguards](#alarm-reliability-safeguards) for what's going on underneath.
+
+## Example automations
+
+Entity ids below are for a phone that shows up as "Pixel 8 Alarm Clock" — substitute your
+own.
+
+```yaml
+# Ramp the bedroom lights up when the alarm actually starts ringing
+- alias: Sunrise on alarm
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.pixel_8_alarm_clock_ringing
+      to: "on"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom
+      data:
+        brightness_pct: 100
+        transition: 60
+
+# Warm the house up half an hour before whatever alarm is next
+- alias: Preheat before alarm
+  trigger:
+    - platform: time
+      at:
+        entity_id: sensor.pixel_8_alarm_clock_next_alarm
+        offset: "-00:30:00"
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.living_room
+      data:
+        temperature: 20
+
+# Dismiss the alarm with a physical bedside button
+- alias: Bedside button dismisses alarm
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.bedside_button
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: binary_sensor.pixel_8_alarm_clock_ringing
+      state: "on"
+  action:
+    - service: button.press
+      target:
+        entity_id: button.pixel_8_alarm_clock_dismiss
+```
+
+(The `offset:` option on an entity-based `time` trigger needs a reasonably recent Home
+Assistant; on older versions, use a template trigger instead.)
+
+## Using it without Home Assistant
+
+Nothing about the app depends on the integration. Alarms are stored on the phone and
+scheduled by Android itself, so they fire on time whether or not Home Assistant is
+reachable, running, or ever configured. Leaving sync off simply means no sync service and
+no notification for it.
+
+---
+
+The rest of this README is design and implementation notes — how it's built and why,
+rather than how to use it.
 
 ## How it works
 
@@ -69,6 +224,10 @@ alarm for you).
     reuse with each other.
 
 ## UI/UX notes
+
+Why the interface is put together the way it is — the reasoning behind decisions that
+aren't obvious from using it.
+
 
 - **Clock, Alarms, Timers, and Stopwatch are separate bottom-nav tabs** (Clock first),
   swipeable with a `HorizontalPager` as well as tappable, with matching filled/outlined
@@ -326,25 +485,6 @@ filled white: the adaptive icon draws the tree/circuit lines as transparent hole
 its white background layer through, and without that layer they'd be see-through and vanish
 against Home Assistant's dark theme. No `logo.png` is provided — logos are wordmarks, and
 this project doesn't have one; HA falls back to the icon.
-
-## Setting up the Home Assistant side
-
-1. Copy `custom_components/ha_alarmclock/` into your HA config's `custom_components/`
-   directory (or install it via HACS as a custom repository — `hacs.json` is already
-   set up for that), then restart Home Assistant.
-2. Settings → Devices & Services → Add Integration → search "HA Alarm Clock". There's
-   nothing to fill in; it just needs to be added once.
-3. In your HA profile (bottom left → your name) → Security tab → generate a
-   **Long-Lived Access Token**.
-4. In the Android app's Settings screen, enter your Home Assistant URL and that token,
-   and enable sync. A device (with its alarms as switches and next-trigger sensors, its
-   timers as trigger-time sensors, a ringing sensor, a device-wide next-alarm sensor,
-   and snooze/dismiss buttons) appears in HA the first time it pushes.
-
-Only one instance of the integration is needed even with multiple phones — each
-device that pushes to it shows up as its own HA device automatically. If more than one
-phone has synced, `ha_alarmclock.create_alarm` needs its `device_id` field to say which
-one; with just one phone, it's picked automatically.
 
 ## Building the Android app
 
