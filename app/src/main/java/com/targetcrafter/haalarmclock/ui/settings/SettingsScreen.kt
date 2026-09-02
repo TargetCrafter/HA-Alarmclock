@@ -2,6 +2,8 @@ package com.targetcrafter.haalarmclock.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledIconButton
@@ -45,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -57,10 +61,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.getSystemService
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
 import com.targetcrafter.haalarmclock.data.AppDefaults
@@ -171,6 +180,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .padding(bottom = 72.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            ReliabilitySection()
+
+            HorizontalDivider()
+
             Text("Alarm defaults", style = MaterialTheme.typography.titleMedium)
             Text(
                 "Applied to every alarm unless it sets its own value in the alarm's own editor.",
@@ -282,6 +295,86 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     }
 }
+
+/**
+ * OS-level settings that can silently stop alarms from ringing even though the app scheduled them
+ * correctly: aggressive battery management killing the app before the alarm fires, and (Android
+ * 14+) the OS refusing to let a notification's fullScreenIntent actually launch the ringing screen.
+ * Neither can be fixed from app code alone — the user has to grant them once, so this surfaces
+ * their current status with a one-tap fix.
+ */
+@Composable
+private fun ReliabilitySection() {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var batteryUnrestricted by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
+    var fullScreenIntentAllowed by remember { mutableStateOf(canUseFullScreenIntent(context)) }
+
+    // Both are only changeable via a system settings screen the user is sent to below, so re-check
+    // on every return to this screen rather than relying on any callback.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                batteryUnrestricted = isIgnoringBatteryOptimizations(context)
+                fullScreenIntentAllowed = canUseFullScreenIntent(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    if (batteryUnrestricted && fullScreenIntentAllowed) return
+
+    Text("Alarm reliability", style = MaterialTheme.typography.titleMedium)
+    Text(
+        "These are Android system settings, not part of this app — they can silently stop an " +
+            "alarm from ringing even when it's scheduled correctly, and only you can grant them.",
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    if (!batteryUnrestricted) {
+        ReliabilityWarningRow(
+            title = "Battery optimization is restricting this app",
+            description = "The most common reason an alarm silently doesn't go off: the OS kills " +
+                "the app in the background before the alarm fires. Exempt it to fix this.",
+            buttonLabel = "Fix",
+            onClick = {
+                context.startActivity(
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")),
+                )
+            },
+        )
+    }
+    if (!fullScreenIntentAllowed) {
+        ReliabilityWarningRow(
+            title = "Full-screen alarm not permitted",
+            description = "Without this, the ringing screen may not show over the lock screen — " +
+                "the alarm can still play sound/vibration, but you may not see it.",
+            buttonLabel = "Fix",
+            onClick = {
+                context.startActivity(
+                    Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}")),
+                )
+            },
+        )
+    }
+}
+
+@Composable
+private fun ReliabilityWarningRow(title: String, description: String, buttonLabel: String, onClick: () -> Unit) {
+    ListItem(
+        leadingContent = { Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+        headlineContent = { Text(title) },
+        supportingContent = { Text(description) },
+        trailingContent = { TextButton(onClick = onClick) { Text(buttonLabel) } },
+    )
+}
+
+private fun isIgnoringBatteryOptimizations(context: android.content.Context): Boolean =
+    context.getSystemService<PowerManager>()?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+
+private fun canUseFullScreenIntent(context: android.content.Context): Boolean =
+    NotificationManagerCompat.from(context).canUseFullScreenIntent()
 
 @Composable
 private fun SteppedValueRow(label: String, value: Int, unit: String, onValueChange: (Int) -> Unit, step: Int = 1) {

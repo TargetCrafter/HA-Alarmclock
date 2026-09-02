@@ -13,7 +13,9 @@ import android.os.CombinedVibration
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
@@ -25,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private const val TAG = "AlarmRingService"
 private const val MAX_RING_DURATION_MILLIS = 10 * 60 * 1000L
 private const val NOTIFICATION_ID = 42
 private const val FADE_IN_STEP_MILLIS = 500L
@@ -59,14 +62,15 @@ class AlarmRingService : LifecycleService() {
             val alarm = HaAlarmClockApp.from(this@AlarmRingService).repository.getById(alarmId) ?: return@launch
             currentAlarm = alarm
             RingingState.setRinging(alarm)
-            // Relies solely on the notification's fullScreenIntent (below) to bring up
-            // RingingActivity, rather than also calling startActivity() directly here: since
-            // Android 10, a plain startActivity() from a background Service is subject to
-            // background-activity-launch restrictions and isn't reliably honored (this was
-            // likely why the ringing UI wasn't appearing over the lock screen). fullScreenIntent
-            // is the OS-sanctioned mechanism for exactly this — alarms and incoming calls — and
-            // needs USE_FULL_SCREEN_INTENT declared in the manifest to work on API 34+.
+            // The notification's fullScreenIntent (below) is the primary, OS-sanctioned way to
+            // bring up RingingActivity over the lock screen — a plain startActivity() from a
+            // background Service is otherwise subject to Android 10+'s background-activity-launch
+            // restrictions and isn't reliably honored. But Android 14+ can itself refuse to honor
+            // fullScreenIntent (see launchRingingActivityIfFullScreenIntentUnusable below), so that
+            // path attempts the direct launch as a fallback specifically when the OS has told us
+            // fullScreenIntent won't work.
             startForeground(NOTIFICATION_ID, buildNotification(alarm))
+            launchRingingActivityIfFullScreenIntentUnusable()
             startRinging(alarm)
             delay(MAX_RING_DURATION_MILLIS)
             handleDismiss()
@@ -105,33 +109,69 @@ class AlarmRingService : LifecycleService() {
         stopSelf()
     }
 
+    /** Candidate ringtone URIs to try in order: the alarm's own choice first, falling back to the
+     * device default alarm sound, and finally *any* valid ringtone — so a stale/revoked URI (e.g.
+     * a ringtone from an app since uninstalled, or a file that moved) doesn't leave the alarm
+     * silent. Deduplicated since the first candidate is often already the default. */
+    private fun candidateRingtoneUris(alarm: Alarm): List<Uri> {
+        val candidates = listOfNotNull(
+            alarm.ringtoneUri?.let(Uri::parse),
+            RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM),
+            RingtoneManager.getValidRingtoneUri(this),
+        )
+        return candidates.distinct()
+    }
+
     private fun startRinging(alarm: Alarm) {
-        val uri: Uri = alarm.ringtoneUri?.let(Uri::parse)
-            ?: RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getValidRingtoneUri(this)
-        mediaPlayer = MediaPlayer().apply {
-            setAudioAttributes(
+        val candidates = candidateRingtoneUris(alarm)
+        if (candidates.isEmpty()) {
+            Log.e(TAG, "startRinging: no ringtone URI available at all (not even a system default)")
+        }
+        for ((index, uri) in candidates.withIndex()) {
+            val player = MediaPlayer()
+            player.setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build(),
             )
-            isLooping = true
+            player.isLooping = true
             try {
-                setDataSource(this@AlarmRingService, uri)
-                prepare()
-                if (alarm.fadeInEnabled) setVolume(FADE_IN_START_VOLUME, FADE_IN_START_VOLUME)
-                start()
-            } catch (_: Exception) {
-                release()
-                mediaPlayer = null
+                player.setDataSource(this, uri)
+                player.prepare()
+                if (alarm.fadeInEnabled) player.setVolume(FADE_IN_START_VOLUME, FADE_IN_START_VOLUME)
+                player.start()
+                mediaPlayer = player
+                break
+            } catch (e: Exception) {
+                Log.e(TAG, "startRinging: candidate $index/$uri failed to play, trying next", e)
+                player.release()
             }
+        }
+        if (mediaPlayer == null) {
+            Log.e(TAG, "startRinging: every ringtone candidate failed — alarm ${alarm.id} will ring silently, vibration only")
         }
         if (alarm.fadeInEnabled && mediaPlayer != null) {
             val defaults = HaAlarmClockApp.from(this).appDefaultsStore.defaults.value
             startFadeIn(alarm.effectiveFadeInSeconds(defaults) * 1_000L)
         }
         if (alarm.vibrate) startVibration()
+    }
+
+    /** Android 14+ can silently demote a notification's fullScreenIntent to a plain heads-up
+     * notification instead of launching the activity, e.g. when the app hasn't been granted the
+     * "Full screen intent" special app access. [buildNotification]'s fullScreenIntent is still the
+     * primary mechanism (see its comment), but when the OS has told us up front it won't honor
+     * one, fall back to a direct launch — attempted from the same background-start exemption
+     * window this service is already running in as a direct result of the alarm broadcast. */
+    private fun launchRingingActivityIfFullScreenIntentUnusable() {
+        if (NotificationManagerCompat.from(this).canUseFullScreenIntent()) return
+        Log.w(TAG, "launchRingingActivityIfFullScreenIntentUnusable: full-screen intent not permitted, launching RingingActivity directly")
+        try {
+            startActivity(Intent(this, RingingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            Log.e(TAG, "launchRingingActivityIfFullScreenIntentUnusable: direct launch also failed", e)
+        }
     }
 
     /** Ramps [mediaPlayer]'s volume from [FADE_IN_START_VOLUME] to full over [durationMillis]. */

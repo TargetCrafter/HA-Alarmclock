@@ -353,9 +353,51 @@ templates picked the wrong match). What's still untested is the full runtime pat
 the HTTP view wired through HA's auth middleware, a real Assist voice pipeline) — worth
 a real smoke test before relying on it.
 
+## Alarm reliability safeguards
+
+An alarm that schedules correctly but doesn't actually ring is the worst possible failure
+mode for this app, and several of its causes live entirely outside app code — in OS-level
+settings only the user can grant. To make failures both less likely and (if they still
+happen) diagnosable:
+
+- **Settings → "Alarm reliability" section**: a warning card, hidden once both are
+  granted, that surfaces two OS settings and offers a one-tap fix for each:
+  - Battery optimization exemption (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) — by
+    far the most common real-world cause of "the alarm silently didn't go off": OEM
+    battery managers (Samsung, Xiaomi, Huawei, OnePlus, etc., layered on top of stock
+    Android Doze) can kill the app's process in the background before `AlarmManager`
+    ever fires, regardless of how the alarm was scheduled.
+  - Full-screen intent permission (`ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`, Android
+    14+/API 34+) — without it the OS can silently demote the ringing notification's
+    `fullScreenIntent` to a plain heads-up notification instead of actually launching
+    the ringing screen over the lock screen. `AlarmRingService` also now detects this
+    itself (`NotificationManagerCompat.canUseFullScreenIntent()`) and falls back to
+    launching `RingingActivity` directly when it's not granted.
+  - The card re-checks both on every return to the Settings screen (a
+    `LifecycleEventObserver` on `ON_RESUME`), since the only way to change either is a
+    trip to a system settings screen and back.
+- **Ringtone fallback chain**: `AlarmRingService.startRinging()` used to try exactly one
+  ringtone URI and, if `MediaPlayer` failed to prepare it for any reason (a stale URI
+  from an uninstalled ringtone-providing app, a moved/deleted file, a revoked
+  permission), silently give up with no sound and no log — ringing on vibration alone,
+  or on nothing if vibration was also off. It now tries the alarm's own ringtone, then
+  the device default alarm sound, then any valid ringtone in turn, logging each failure,
+  before giving up.
+- **Logging on every previously-silent failure path**: `AlarmReceiver` now logs (rather
+  than silently returning) when a fired alarm's ID no longer exists in the database or
+  the alarm is disabled; `AlarmRingService` logs each ringtone candidate's failure and
+  whether every candidate failed.
+
+None of this can fully rule out OEM-specific background-kill behavior the OS doesn't
+expose any API to detect or work around — the battery optimization exemption above is
+the app's best available defense against that class of failure.
+
 ## Permissions
 
 - `SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM` — required to use `setAlarmClock()`.
+- `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` — lets the app launch the system dialog for the
+  user to exempt it from battery optimization (see "Alarm reliability safeguards" above);
+  doesn't grant the exemption itself.
 - `POST_NOTIFICATIONS` — for the ringing alarm, the (minimum-priority) HA sync status
   notification, and the (also minimum-priority) analog-widget-ticker notification.
 - `FOREGROUND_SERVICE_MEDIA_PLAYBACK` — the alarm and timer ringing services play sound.
