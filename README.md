@@ -473,11 +473,9 @@ There are two places an icon for this integration gets looked up, and they are n
   which is why the files live there, and what satisfies its `brands` check.
 - **Home Assistant core** resolves integration icons from the
   [home-assistant/brands](https://github.com/home-assistant/brands) repository by domain,
-  not from this repo at all. To make the icon show up there too, copy
-  `custom_components/ha_alarmclock/brand/` into a fork of that repo as
-  `custom_integrations/ha_alarmclock/` (the filenames and 256/512 sizes already match what
-  it requires) and open a PR. Until that merges, HA shows a generic placeholder regardless
-  of what is in this repo.
+  not from this repo at all. Until a PR lands there, Home Assistant shows a generic
+  placeholder no matter what this repository contains — that submission is the only thing
+  that makes the icon appear on the Integrations page.
 
 Both are PNG with transparency, trimmed and padded to the required 1:1 square. They're
 derived from the Android launcher icon's foreground layer, with the interior knockouts
@@ -485,6 +483,33 @@ filled white: the adaptive icon draws the tree/circuit lines as transparent hole
 its white background layer through, and without that layer they'd be see-through and vanish
 against Home Assistant's dark theme. No `logo.png` is provided — logos are wordmarks, and
 this project doesn't have one; HA falls back to the icon.
+
+#### Submitting the icon to home-assistant/brands
+
+The files already match everything that repository requires (`icon.png` at 256×256,
+`icon@2x.png` at 512×512, PNG, transparent, trimmed, and not using Home Assistant's own
+branding — which custom integrations aren't allowed to do). Submitting them is a copy,
+run from the directory holding this checkout:
+
+```bash
+gh repo fork home-assistant/brands --clone --remote
+cd brands
+git checkout -b ha-alarmclock-icon
+
+mkdir -p custom_integrations/ha_alarmclock
+cp ../HA-Alarmclock/custom_components/ha_alarmclock/brand/icon.png custom_integrations/ha_alarmclock/
+cp "../HA-Alarmclock/custom_components/ha_alarmclock/brand/icon@2x.png" custom_integrations/ha_alarmclock/
+
+git add custom_integrations/ha_alarmclock
+git commit -m "Add HA Alarm Clock custom integration icon"
+git push -u origin ha-alarmclock-icon
+gh pr create --repo home-assistant/brands \
+  --title "Add HA Alarm Clock custom integration icon" \
+  --body "Adds the icon for the ha_alarmclock custom integration (https://github.com/TargetCrafter/HA-Alarmclock)."
+```
+
+Brands does not permit symlinks for custom integrations, so these are real copies — if the
+app's launcher icon ever changes, regenerate the files here and open a fresh PR there.
 
 ## Building the Android app
 
