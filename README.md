@@ -301,13 +301,31 @@ custom_components/ha_alarmclock/   Home Assistant custom integration (Python)
   config_flow.py  single-step "confirm setup" flow (no secrets collected on the HA side)
   icons.json      icon for the create_alarm service in HA's UI (entity icons are still
                   set in code via _attr_icon)
+  brand/          icon.png (256²) + icon@2x.png (512²) — the integration's icon; see
+                  "Integration icon" below for why it lives here
   binary_sensor.py, sensor.py, switch.py, button.py   the entities themselves
-
-brands/custom_integrations/ha_alarmclock/   the integration's icon, at the sizes
-  home-assistant/brands requires. Home Assistant resolves integration icons from that
-  repo by domain rather than from this one, so these are staged here to be submitted
-  as a PR there — see brands/README.md.
 ```
+
+### Integration icon
+
+There are two places an icon for this integration gets looked up, and they are not the same:
+
+- **HACS** checks the repository itself, at `custom_components/<domain>/brand/icon.png` —
+  which is why the files live there, and what satisfies its `brands` check.
+- **Home Assistant core** resolves integration icons from the
+  [home-assistant/brands](https://github.com/home-assistant/brands) repository by domain,
+  not from this repo at all. To make the icon show up there too, copy
+  `custom_components/ha_alarmclock/brand/` into a fork of that repo as
+  `custom_integrations/ha_alarmclock/` (the filenames and 256/512 sizes already match what
+  it requires) and open a PR. Until that merges, HA shows a generic placeholder regardless
+  of what is in this repo.
+
+Both are PNG with transparency, trimmed and padded to the required 1:1 square. They're
+derived from the Android launcher icon's foreground layer, with the interior knockouts
+filled white: the adaptive icon draws the tree/circuit lines as transparent holes that let
+its white background layer through, and without that layer they'd be see-through and vanish
+against Home Assistant's dark theme. No `logo.png` is provided — logos are wordmarks, and
+this project doesn't have one; HA falls back to the icon.
 
 ## Setting up the Home Assistant side
 
@@ -480,3 +498,20 @@ the phone's next push after a Home Assistant restart rather than persisted to di
 Timers aren't controllable *from* HA (only exposed as sensors) — only alarms have a
 switch entity and HA→phone commands; symmetric timer control (pause/resume/cancel from
 HA) would be a natural follow-up if wanted.
+
+## License
+
+[GNU General Public License v3.0](LICENSE) — a strong copyleft license: anyone may use,
+modify and redistribute this, including commercially, but any work they distribute that
+builds on it has to be released under the GPLv3 as well, with source available. That is
+the point of choosing it here rather than a permissive license: improvements to a fork
+stay available to everyone rather than disappearing into a closed product.
+
+All of the project's dependencies (AndroidX/Jetpack Compose, Room, OkHttp, Home Assistant
+itself) are Apache-2.0, which is one-way compatible with GPLv3 — Apache-2.0 code can be
+combined into a GPLv3 work, so this is a valid combination.
+
+One thing worth knowing if distribution plans ever change: GPLv3 and Google Play's terms
+are an awkward fit (GPLv3's installation-information requirements versus Play's
+distribution terms), which is a long-running debate rather than a settled prohibition.
+Distributing the APK from GitHub releases, as here, raises none of that.
