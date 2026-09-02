@@ -1,8 +1,11 @@
 package com.targetcrafter.haalarmclock.ui
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,10 +23,12 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.AvTimer
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.AvTimer
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -32,6 +37,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +64,7 @@ import com.targetcrafter.haalarmclock.ui.settings.SettingsScreen
 import com.targetcrafter.haalarmclock.ui.stopwatch.StopwatchScreen
 import com.targetcrafter.haalarmclock.ui.theme.HaAlarmClockTheme
 import com.targetcrafter.haalarmclock.ui.timerlist.TimerListScreen
+import com.targetcrafter.haalarmclock.util.isIgnoringBatteryOptimizations
 import kotlinx.coroutines.launch
 
 private const val ROUTE_TABS = "tabs"
@@ -110,6 +117,8 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(onBack = { navController.popBackStack() })
                     }
                 }
+
+                BatteryOptimizationNudge()
             }
         }
     }
@@ -122,6 +131,43 @@ class MainActivity : ComponentActivity() {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
+}
+
+/** Nudges the user to exempt the app from battery optimization every time the app is opened
+ * without it granted — this is by far the most common reason a correctly-scheduled alarm never
+ * actually rings (the OS kills the app in the background before AlarmManager fires), so it's
+ * worth surfacing up front rather than leaving it to the easy-to-miss card buried in Settings. */
+@Composable
+private fun BatteryOptimizationNudge() {
+    val context = LocalContext.current
+    var showDialog by remember { mutableStateOf(!isIgnoringBatteryOptimizations(context)) }
+
+    if (!showDialog) return
+
+    AlertDialog(
+        onDismissRequest = { showDialog = false },
+        icon = { Icon(Icons.Filled.Warning, contentDescription = null) },
+        title = { Text("Make alarms reliable") },
+        text = {
+            Text(
+                "Battery optimization can let Android silently stop this app in the background " +
+                    "before a scheduled alarm ever fires — the single most common reason an " +
+                    "alarm doesn't go off. Please exempt \"HA Alarm Clock\" from battery " +
+                    "optimization so your alarms can be trusted to ring.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                context.startActivity(
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")),
+                )
+                showDialog = false
+            }) { Text("Fix now") }
+        },
+        dismissButton = {
+            TextButton(onClick = { showDialog = false }) { Text("Later") }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

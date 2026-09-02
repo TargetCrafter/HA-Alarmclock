@@ -2,7 +2,6 @@ package com.targetcrafter.haalarmclock.ui.settings
 
 import android.content.Intent
 import android.net.Uri
-import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -66,8 +65,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.getSystemService
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -79,6 +76,8 @@ import com.targetcrafter.haalarmclock.ha.HaConnectionState
 import com.targetcrafter.haalarmclock.ha.HaSettings
 import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.appViewModelFactory
+import com.targetcrafter.haalarmclock.util.canUseFullScreenIntent
+import com.targetcrafter.haalarmclock.util.isIgnoringBatteryOptimizations
 
 private val PRESET_COLORS = listOf(
     0xFF1B1B1B.toInt(), // near-black (default widget background)
@@ -369,12 +368,6 @@ private fun ReliabilityWarningRow(title: String, description: String, buttonLabe
         trailingContent = { TextButton(onClick = onClick) { Text(buttonLabel) } },
     )
 }
-
-private fun isIgnoringBatteryOptimizations(context: android.content.Context): Boolean =
-    context.getSystemService<PowerManager>()?.isIgnoringBatteryOptimizations(context.packageName) ?: true
-
-private fun canUseFullScreenIntent(context: android.content.Context): Boolean =
-    NotificationManagerCompat.from(context).canUseFullScreenIntent()
 
 @Composable
 private fun SteppedValueRow(label: String, value: Int, unit: String, onValueChange: (Int) -> Unit, step: Int = 1) {

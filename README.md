@@ -360,8 +360,15 @@ mode for this app, and several of its causes live entirely outside app code — 
 settings only the user can grant. To make failures both less likely and (if they still
 happen) diagnosable:
 
-- **Settings → "Alarm reliability" section**: a warning card, hidden once both are
-  granted, that surfaces two OS settings and offers a one-tap fix for each:
+- **Launch popup**: if battery optimization isn't yet disabled for the app,
+  `MainActivity` shows a dialog every time the app is opened explaining why it matters
+  and offering a "Fix now" button straight to
+  `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (or "Later" to dismiss just that
+  launch — it reappears next time until actually granted, deliberately, since this is
+  the single biggest lever the app has over whether alarms are reliable).
+- **Settings → "Alarm reliability" section**: the same check, as a persistent (not
+  dismissible-forever) warning card, hidden once both are granted, that surfaces two OS
+  settings and offers a one-tap fix for each:
   - Battery optimization exemption (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) — by
     far the most common real-world cause of "the alarm silently didn't go off": OEM
     battery managers (Samsung, Xiaomi, Huawei, OnePlus, etc., layered on top of stock
