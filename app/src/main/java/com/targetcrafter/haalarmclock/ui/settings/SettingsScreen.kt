@@ -265,6 +265,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (baseUrl.trim().startsWith("http://", ignoreCase = true)) {
+                ReliabilityWarningRow(
+                    title = "Unencrypted connection",
+                    description = "This URL uses http://, so your access token is sent in the " +
+                        "clear and anyone on the same network can read it — and that token can " +
+                        "control all of Home Assistant, not just alarms. Fine on a network you " +
+                        "trust; use https:// otherwise.",
+                )
+            }
+
             OutlinedTextField(
                 value = accessToken,
                 onValueChange = { accessToken = it },
@@ -359,13 +369,24 @@ private fun ReliabilitySection() {
     }
 }
 
+/** [buttonLabel]/[onClick] are optional: some warnings (an http:// URL) are fixed by editing a
+ * field on this screen rather than by a jump to a system settings page. */
 @Composable
-private fun ReliabilityWarningRow(title: String, description: String, buttonLabel: String, onClick: () -> Unit) {
+private fun ReliabilityWarningRow(
+    title: String,
+    description: String,
+    buttonLabel: String? = null,
+    onClick: (() -> Unit)? = null,
+) {
     ListItem(
         leadingContent = { Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
         headlineContent = { Text(title) },
         supportingContent = { Text(description) },
-        trailingContent = { TextButton(onClick = onClick) { Text(buttonLabel) } },
+        trailingContent = if (buttonLabel != null && onClick != null) {
+            { TextButton(onClick = onClick) { Text(buttonLabel) } }
+        } else {
+            null
+        },
     )
 }
 

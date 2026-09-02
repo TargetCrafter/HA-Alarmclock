@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup rules for Android 12+ (android:dataExtractionRules). Same reasoning as backup_rules.xml:
+  the encrypted HA URL/token file is excluded from both cloud backup and device-to-device transfer,
+  since its Keystore master key can't travel with it and a restored-but-undecryptable file crashes
+  the app at launch. Everything else (alarms, timers, preferences) is kept so alarms survive a
+  phone upgrade.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="ha_settings.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="ha_settings.xml" />
+    </device-transfer>
+</data-extraction-rules>

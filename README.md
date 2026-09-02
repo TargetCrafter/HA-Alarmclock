@@ -399,6 +399,44 @@ None of this can fully rule out OEM-specific background-kill behavior the OS doe
 expose any API to detect or work around — the battery optimization exemption above is
 the app's best available defense against that class of failure.
 
+## Security notes
+
+The phone and Home Assistant trust each other over a long-lived access token, and HA's event
+bus is shared by everything on the instance, so a few things are deliberately hardened:
+
+- **Commands are filtered by `device_id`.** HA's event bus is global: every phone connected
+  to the same Home Assistant receives *every* `ha_alarmclock_command` event, including ones
+  the integration resolved for a different phone. `HaWebSocketClient.isForThisDevice` drops
+  events aimed elsewhere, so a second phone in the household can't snooze/dismiss the first
+  one's alarm — or, worse, apply another phone's alarm id to whatever unrelated alarm shares
+  that id locally. (An event with no `device_id` is still accepted, so an older integration
+  version keeps working rather than losing HA control silently.)
+- **Alarm times from HA are range-checked.** `create_alarm`'s time is matched by shape *and*
+  range before an `Alarm` is built from it. `AlarmRepository.save` re-checks as an invariant,
+  since the row is written to Room before it's scheduled: persisting an out-of-range time
+  would mean `rescheduleAll` throws on it again on every launch and every boot, not just once.
+  `rescheduleAll` disables such a row instead of scheduling it, which doubles as the repair
+  path for anything written by an older build, and the HA command loop handles each command in
+  its own try/catch so no future parse gap can take the app process down.
+- **Cleartext HTTP is allowed but flagged.** Most home HA installs are plain HTTP on the LAN,
+  so `network_security_config.xml` permits it — but the access token rides on it in an
+  `Authorization` header and grants control of *all* of Home Assistant, not just alarms.
+  Settings shows a warning whenever the configured URL is `http://` rather than failing the
+  connection outright, since on a trusted LAN this is a reasonable tradeoff to make knowingly.
+- **The token is excluded from backups.** It lives in `EncryptedSharedPreferences`, whose
+  master key is in the hardware Keystore and can't be backed up — so the encrypted file is
+  excluded from both cloud backup and device transfer (`backup_rules.xml`,
+  `data_extraction_rules.xml`). Including it would copy the credential off the device *and*
+  restore it somewhere undecryptable, which crashes the app at launch. Alarms and preferences
+  are still backed up, so they survive a phone upgrade; the URL and token get re-entered.
+- **The integration caps tracked devices** (`store.MAX_DEVICES`) so a buggy or malicious
+  client can't fill Home Assistant with devices and entities by churning `device_id`s.
+
+The sync endpoint itself is authenticated as a normal HA API view (`requires_auth = True`),
+all Room queries are parameterized, every `PendingIntent` is `FLAG_IMMUTABLE`, and only
+`MainActivity` and `BootReceiver` are exported (the latter accepting only protected system
+broadcasts).
+
 ## Permissions
 
 - `SCHEDULE_EXACT_ALARM` / `USE_EXACT_ALARM` — required to use `setAlarmClock()`.

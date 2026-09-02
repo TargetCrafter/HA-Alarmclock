@@ -1,7 +1,10 @@
 package com.targetcrafter.haalarmclock.data
 
+import android.util.Log
 import com.targetcrafter.haalarmclock.alarm.AlarmScheduler
 import kotlinx.coroutines.flow.Flow
+
+private const val TAG = "AlarmRepository"
 
 class AlarmRepository(
     private val dao: AlarmDao,
@@ -13,8 +16,13 @@ class AlarmRepository(
 
     /** Inserts or updates [alarm] and (re)schedules or cancels it as appropriate. Any pending
      * snooze is invalidated, since the alarm's own settings just changed underneath it — use
-     * [markSnoozed]/[clearSnoozed] instead if you specifically want to touch snooze state. */
+     * [markSnoozed]/[clearSnoozed] instead if you specifically want to touch snooze state.
+     *
+     * Rejects an out-of-range time before touching the database: the row is written before it's
+     * scheduled, so persisting one would mean [rescheduleAll] hits it again on every launch and
+     * every boot, not just once here. */
     suspend fun save(alarm: Alarm): Alarm {
+        require(alarm.hasValidTime) { "Alarm time ${alarm.hour}:${alarm.minute} is out of range" }
         val toSave = alarm.copy(snoozedUntilMillis = null)
         val id = dao.upsert(toSave)
         val saved = if (toSave.id == 0L) toSave.copy(id = id) else toSave
@@ -30,6 +38,13 @@ class AlarmRepository(
 
     suspend fun setEnabled(id: Long, enabled: Boolean) {
         val alarm = dao.getById(id) ?: return
+        // A row with an out-of-range time can't be scheduled, so enabling it would only throw out
+        // of [save] — and this is reachable straight from the list's toggle, so it has to no-op
+        // rather than crash. Disabling one is still allowed, since that needs no scheduling.
+        if (enabled && !alarm.hasValidTime) {
+            Log.e(TAG, "Refusing to enable alarm $id: time ${alarm.hour}:${alarm.minute} is out of range")
+            return
+        }
         save(alarm.copy(enabled = enabled))
     }
 
@@ -39,9 +54,23 @@ class AlarmRepository(
         save(alarm.copy(hour = hour, minute = minute))
     }
 
-    /** Re-arms every enabled alarm's AlarmManager entry; alarms don't survive a reboot on their own. */
+    /** Re-arms every enabled alarm's AlarmManager entry; alarms don't survive a reboot on their own.
+     *
+     * A row with an out-of-range time is disabled instead of scheduled. This runs on boot and after
+     * an app update, so it doubles as the repair path for a bad row written by a build before [save]
+     * rejected them: scheduling one throws, which would otherwise crash the app every single time
+     * the phone starts and take every *other* alarm's scheduling down with it. Disabling it leaves
+     * it visible in the list (switched off, showing its nonsense time) for the user to fix or
+     * delete, rather than deleting something they created out from under them. */
     suspend fun rescheduleAll() {
-        dao.getAllOnce().filter { it.enabled }.forEach { scheduler.schedule(it) }
+        dao.getAllOnce().filter { it.enabled }.forEach { alarm ->
+            if (alarm.hasValidTime) {
+                scheduler.schedule(alarm)
+            } else {
+                Log.e(TAG, "Disabling alarm ${alarm.id}: time ${alarm.hour}:${alarm.minute} is out of range")
+                dao.update(alarm.copy(enabled = false))
+            }
+        }
     }
 
     /** Called by [AlarmScheduler]'s receiver once a one-off alarm has fired. */

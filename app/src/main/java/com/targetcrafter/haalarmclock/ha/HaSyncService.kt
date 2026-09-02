@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
+private const val TAG = "HaSyncService"
 private const val NOTIFICATION_ID = 1
 private const val INITIAL_BACKOFF_MILLIS = 2_000L
 private const val MAX_BACKOFF_MILLIS = 60_000L
@@ -103,46 +105,16 @@ class HaSyncService : LifecycleService() {
             }
         }
 
-        // Route commands HA sent us back into the app's own action paths.
+        // Route commands HA sent us back into the app's own action paths. Each command is handled
+        // inside its own try/catch: lifecycleScope has no CoroutineExceptionHandler, so without
+        // this an exception from one malformed command would take the whole app process down and
+        // leave HA control dead until the next launch.
         lifecycleScope.launch {
             app.haWebSocketClient.commands.collect { command ->
-                when (command) {
-                    is HaCommand.SetAlarmEnabled -> app.repository.setEnabled(command.alarmId, command.enabled)
-                    HaCommand.Snooze -> AlarmActions.snooze(this@HaSyncService)
-                    HaCommand.Dismiss -> AlarmActions.dismiss(this@HaSyncService)
-                    is HaCommand.CreateAlarm -> {
-                        // A blank label (e.g. from a plain "set an alarm for 7am" Assist command,
-                        // which never sets one) reuses the most recently created still-unnamed
-                        // alarm instead of piling up a new one every time — repeated voice
-                        // requests just keep moving the same "unnamed" alarm's time. A labeled
-                        // request always creates fresh, and existing labeled alarms are never
-                        // touched by this at all.
-                        val existingUnnamed = if (command.label.isBlank()) {
-                            app.repository.alarms.first().filter { it.label.isBlank() }.maxByOrNull { it.id }
-                        } else {
-                            null
-                        }
-                        if (existingUnnamed != null) {
-                            app.repository.save(
-                                existingUnnamed.copy(
-                                    hour = command.hour,
-                                    minute = command.minute,
-                                    repeatDaysMask = command.repeatDaysMask,
-                                    enabled = true,
-                                    snoozedUntilMillis = null,
-                                ),
-                            )
-                        } else {
-                            app.repository.save(
-                                Alarm(
-                                    hour = command.hour,
-                                    minute = command.minute,
-                                    label = command.label,
-                                    repeatDaysMask = command.repeatDaysMask,
-                                ),
-                            )
-                        }
-                    }
+                try {
+                    handleCommand(app, command)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Ignoring HA command that failed to apply: $command", e)
                 }
             }
         }
@@ -150,6 +122,47 @@ class HaSyncService : LifecycleService() {
         lifecycleScope.launch {
             app.haWebSocketClient.connectionState.collect { state ->
                 updateNotification(state == HaConnectionState.CONNECTED)
+            }
+        }
+    }
+
+    private suspend fun handleCommand(app: HaAlarmClockApp, command: HaCommand) {
+        when (command) {
+            is HaCommand.SetAlarmEnabled -> app.repository.setEnabled(command.alarmId, command.enabled)
+            HaCommand.Snooze -> AlarmActions.snooze(this)
+            HaCommand.Dismiss -> AlarmActions.dismiss(this)
+            is HaCommand.CreateAlarm -> {
+                // A blank label (e.g. from a plain "set an alarm for 7am" Assist command,
+                // which never sets one) reuses the most recently created still-unnamed
+                // alarm instead of piling up a new one every time — repeated voice
+                // requests just keep moving the same "unnamed" alarm's time. A labeled
+                // request always creates fresh, and existing labeled alarms are never
+                // touched by this at all.
+                val existingUnnamed = if (command.label.isBlank()) {
+                    app.repository.alarms.first().filter { it.label.isBlank() }.maxByOrNull { it.id }
+                } else {
+                    null
+                }
+                if (existingUnnamed != null) {
+                    app.repository.save(
+                        existingUnnamed.copy(
+                            hour = command.hour,
+                            minute = command.minute,
+                            repeatDaysMask = command.repeatDaysMask,
+                            enabled = true,
+                            snoozedUntilMillis = null,
+                        ),
+                    )
+                } else {
+                    app.repository.save(
+                        Alarm(
+                            hour = command.hour,
+                            minute = command.minute,
+                            label = command.label,
+                            repeatDaysMask = command.repeatDaysMask,
+                        ),
+                    )
+                }
             }
         }
     }

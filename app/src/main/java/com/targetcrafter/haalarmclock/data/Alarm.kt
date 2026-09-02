@@ -34,7 +34,13 @@ data class Alarm(
 
     val isRepeating: Boolean get() = repeatDaysMask != 0
 
-    /** Computes the next epoch-millis this alarm should fire at, strictly after [from]. */
+    /** Whether [hour]/[minute] are in range. [nextTriggerAtMillis] throws from java.time if they
+     * aren't, so anything that can't tolerate that — scheduling on boot, drawing the widget —
+     * checks this first rather than letting one bad row take the whole path down. */
+    val hasValidTime: Boolean get() = hour in 0..23 && minute in 0..59
+
+    /** Computes the next epoch-millis this alarm should fire at, strictly after [from].
+     * Throws [java.time.DateTimeException] if [hasValidTime] is false. */
     fun nextTriggerAtMillis(from: ZonedDateTime = ZonedDateTime.now(), zone: ZoneId = ZoneId.systemDefault()): Long {
         val nowInZone = from.withZoneSameInstant(zone)
         val todayCandidate = nowInZone.toLocalDate().atTime(hour, minute).atZone(zone)

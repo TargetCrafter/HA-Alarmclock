@@ -60,7 +60,7 @@ class HaAlarmClockApp : Application() {
 
     val haSettingsStore: HaSettingsStore by lazy { HaSettingsStore(this) }
     val haApiClient: HaApiClient by lazy { HaApiClient(httpClient) }
-    val haWebSocketClient: HaWebSocketClient by lazy { HaWebSocketClient(httpClient) }
+    val haWebSocketClient: HaWebSocketClient by lazy { HaWebSocketClient(httpClient, deviceId) }
 
     @get:SuppressLint("HardwareIds")
     val deviceId: String by lazy {

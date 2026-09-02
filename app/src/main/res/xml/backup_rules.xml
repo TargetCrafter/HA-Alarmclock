@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup rules for Android 11 and below (android:fullBackupContent).
+
+  ha_settings.xml holds the Home Assistant URL and long-lived access token in
+  EncryptedSharedPreferences, whose master key lives in the device's hardware-backed Keystore and
+  is deliberately NOT backed up. Including the encrypted file would therefore both copy the
+  credential off the device and restore it somewhere it can never be decrypted — which makes
+  EncryptedSharedPreferences.create() throw on first access and takes the app down at launch.
+  The user re-enters the URL and token after a restore instead.
+
+  Everything else (the alarms/timers database, clock and widget preferences) is still backed up,
+  so alarms survive moving to a new phone.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="ha_settings.xml" />
+</full-backup-content>

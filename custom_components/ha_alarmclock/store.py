@@ -9,6 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# A sync push names the device it's for, and each new name mints a device plus its entities. That's
+# driven by whatever the caller sends, so cap it: a household has a handful of phones, and anything
+# past that is a buggy client (or a token holder churning device ids) filling HA with dead devices.
+MAX_DEVICES = 25
+
 
 @dataclass
 class AlarmInfo:
@@ -70,6 +75,10 @@ class AlarmClockStore:
         """Merge a sync payload into the store. Returns (device_state, is_new_device)."""
         device_id = str(payload["device_id"])
         is_new = device_id not in self.devices
+        if is_new and len(self.devices) >= MAX_DEVICES:
+            raise ValueError(
+                f"Refusing to track more than {MAX_DEVICES} devices (rejected '{device_id}')",
+            )
         device = self.devices.setdefault(
             device_id,
             DeviceState(device_id=device_id, device_name=str(payload.get("device_name") or device_id)),

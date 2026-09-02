@@ -35,7 +35,9 @@ object ClockWidgetUpdater {
         val app = HaAlarmClockApp.from(context)
         val alarms = app.repository.alarms.first()
         val appearance = app.widgetAppearanceStore.appearance.first()
-        val next = alarms.filter { it.enabled }.minByOrNull { it.nextTriggerAtMillis() }
+        // hasValidTime guards nextTriggerAtMillis, which throws on an out-of-range row — one of
+        // those must not be able to stop every widget on the home screen from redrawing.
+        val next = alarms.filter { it.enabled && it.hasValidTime }.minByOrNull { it.nextTriggerAtMillis() }
 
         val manager = AppWidgetManager.getInstance(context)
         val digitalLabel = next?.let { formatNextAlarmWithLabel(context, it) }
