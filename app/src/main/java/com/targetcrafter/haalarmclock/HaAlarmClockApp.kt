@@ -81,6 +81,16 @@ class HaAlarmClockApp : Application() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        // Re-arm everything on every process start, not just after a reboot (BootReceiver). An
+        // AlarmManager entry is dropped when an app is force-stopped — which is exactly what OEM
+        // battery managers do to apps they decide are idle — and nothing notifies the app. Without
+        // this, the alarm list would go on showing an alarm as enabled while the OS held no record
+        // of it, and the only symptom would be not waking up. Re-arming is idempotent: scheduling
+        // the same alarm again just replaces its existing entry.
+        applicationScope.launch {
+            repository.rescheduleAll()
+            timerRepository.rescheduleAll()
+        }
         // Keeps home-screen clock widgets' "next alarm" line and colors live even when HA sync is
         // off and no other component is otherwise watching the alarms table.
         applicationScope.launch {
