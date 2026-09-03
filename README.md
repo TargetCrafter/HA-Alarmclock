@@ -597,9 +597,63 @@ happen) diagnosable:
   ringing service, so testing can't push "an alarm is ringing" to Home Assistant and set off
   whatever you've automated against it.
 
-None of this can fully rule out OEM-specific background-kill behavior the OS doesn't
-expose any API to detect or work around — the battery optimization exemption above is
-the app's best available defense against that class of failure.
+- **Alarms are re-armed on every process start, not just after a reboot.** `AlarmManager`
+  entries survive ordinary process death, but *not* a force-stop — and force-stopping idle
+  apps is exactly what OEM battery managers do. Nothing tells an app it happened, so the
+  alarm list would go on showing an alarm as enabled while the OS held no record of it.
+  `HaAlarmClockApp.onCreate` now re-arms everything (idempotent — rescheduling replaces the
+  existing entry), so any run of the app repairs a dropped schedule.
+- **Settings reports whether Android actually holds the next alarm** (`ScheduleHealth`),
+  by comparing the app's next trigger against `AlarmManager.getNextAlarmClock()` — the same
+  source as the status-bar alarm icon. A dropped schedule becomes something you can see,
+  with a "Re-arm" button, instead of something you discover by not waking up. Because that
+  API reports the next alarm clock across *all* apps, it's conclusive in only two
+  directions; when another app has a sooner alarm the check says so rather than guessing.
+
+### The limit of what the app can guarantee
+
+Being honest about this matters more than reassurance: **an app cannot make itself
+force-stop-proof.** Once Android force-stops an app, its alarms are cancelled, and nothing
+belonging to it runs again — no service, no receiver, no `WorkManager` job, no watchdog —
+until something launches it. Every defense above raises the odds; none makes it certain.
+
+What genuinely closes the gap is redundancy *outside* the phone, which this project happens
+to be well placed for: Home Assistant already knows when the next alarm is due
+(`sensor.<phone>_next_alarm`) and whether the phone reported ringing
+(`binary_sensor.<phone>_ringing`). A backup automation that fires if the alarm time passes
+without the phone ever reporting a ring gives you a second, independent alarm on hardware
+the phone's battery manager has no say over:
+
+```yaml
+- alias: Backup alarm if the phone didn't ring
+  trigger:
+    - platform: time
+      at:
+        entity_id: sensor.pixel_8_alarm_clock_next_alarm
+        offset: "00:02:00"          # two minutes after it should have gone off
+  condition:
+    - condition: state
+      entity_id: binary_sensor.pixel_8_alarm_clock_ringing
+      state: "off"                   # the phone never reported ringing
+  action:
+    - service: media_player.volume_set
+      target:
+        entity_id: media_player.bedroom_speaker
+      data:
+        volume_level: 0.7
+    - service: tts.speak
+      target:
+        entity_id: tts.piper
+      data:
+        media_player_entity_id: media_player.bedroom_speaker
+        message: Your phone alarm did not go off.
+    - service: light.turn_on
+      target:
+        entity_id: light.bedroom
+```
+
+For an alarm that has to work every time, that redundancy is worth more than any further
+hardening inside the app.
 
 ## Security notes
 

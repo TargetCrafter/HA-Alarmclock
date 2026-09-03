@@ -55,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,7 +72,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
 import com.targetcrafter.haalarmclock.alarm.AlarmSoundTestResult
+import com.targetcrafter.haalarmclock.alarm.ScheduleHealth
 import com.targetcrafter.haalarmclock.alarm.alarmVolume
+import com.targetcrafter.haalarmclock.alarm.checkScheduleHealth
 import com.targetcrafter.haalarmclock.alarm.startAlarmSoundTest
 import com.targetcrafter.haalarmclock.data.AppDefaults
 import com.targetcrafter.haalarmclock.data.ClockStyle
@@ -82,6 +85,7 @@ import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.appViewModelFactory
 import com.targetcrafter.haalarmclock.util.canUseFullScreenIntent
 import com.targetcrafter.haalarmclock.util.isIgnoringBatteryOptimizations
+import kotlinx.coroutines.launch
 
 private val PRESET_COLORS = listOf(
     0xFF1B1B1B.toInt(), // near-black (default widget background)
@@ -382,7 +386,61 @@ private fun ReliabilitySection() {
             },
         )
     }
+    ScheduleHealthRow()
     AlarmSoundTestRow()
+}
+
+/**
+ * Reports whether Android itself still holds the alarm the app thinks is next. The app's own list
+ * is not evidence: a force-stop drops the OS's alarm entries silently, so an alarm can read as
+ * enabled here while nothing is actually scheduled — which is invisible until the morning it
+ * doesn't ring. See [checkScheduleHealth].
+ */
+@Composable
+private fun ScheduleHealthRow() {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val app = HaAlarmClockApp.from(context)
+    val scope = rememberCoroutineScope()
+    val alarms by app.repository.alarms.collectAsState(initial = emptyList())
+
+    var health by remember { mutableStateOf<ScheduleHealth>(ScheduleHealth.NoAlarms) }
+    // Recheck whenever the alarms change and on every return to the screen — the OS can drop the
+    // entry at any time, without anything here changing.
+    LaunchedEffect(alarms) { health = checkScheduleHealth(context, alarms) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) health = checkScheduleHealth(context, alarms)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    when (health) {
+        is ScheduleHealth.Missing -> ReliabilityWarningRow(
+            title = "Android isn't holding your next alarm",
+            description = "The alarm is switched on here, but the system has no record of it — " +
+                "which means it will not ring. This happens when the app gets force-stopped, " +
+                "usually by a battery manager. Re-arm it, then exempt the app from battery " +
+                "optimization above and from any \"sleeping apps\" list your phone has.",
+            buttonLabel = "Re-arm",
+            onClick = {
+                scope.launch {
+                    app.repository.rescheduleAll()
+                    health = checkScheduleHealth(context, alarms)
+                }
+            },
+        )
+        is ScheduleHealth.Registered -> ListItem(
+            headlineContent = { Text("Next alarm is registered with Android") },
+            supportingContent = { Text("The system is holding it, so it will ring even if this app is closed.") },
+        )
+        is ScheduleHealth.Inconclusive -> ListItem(
+            headlineContent = { Text("Another app has a sooner alarm") },
+            supportingContent = { Text("That hides this app's alarm from the check, so it can't be confirmed from here.") },
+        )
+        is ScheduleHealth.NoAlarms -> Unit
+    }
 }
 
 /**
