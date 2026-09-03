@@ -558,6 +558,20 @@ happen) diagnosable:
   - The card re-checks both on every return to the Settings screen (a
     `LifecycleEventObserver` on `ON_RESUME`), since the only way to change either is a
     trip to a system settings screen and back.
+- **`startForeground()` is called synchronously, before the alarm is loaded.** This was a real
+  bug, and the one that matched "the alarm works if I've used the app recently, but not when I
+  set it at bedtime and don't open it again". The OS gives a service five seconds from the
+  `startForegroundService()` call to reach `startForeground()`, and kills the app instead if it
+  doesn't. `AlarmRingService` used to call it *inside* a coroutine, after a suspending Room read
+  — and `AlarmReceiver` did two more database reads before even starting the service. With the
+  app recently open, all of that is warm and takes milliseconds. When the alarm is what wakes a
+  process Android killed hours ago, those same reads come off cold storage on a device still
+  spinning up out of Doze, and the window can be missed — so the app is killed instead of
+  ringing, which looks exactly like an alarm that silently didn't go off. Now the receiver starts
+  the service before touching the database, the service posts its notification immediately (a
+  placeholder, filled in once the alarm loads — it carries the same full-screen intent, so the
+  ringing screen still comes up from it), and every path that decides not to ring stops the
+  service instead of leaving it foreground with no notification.
 - **Ringtone fallback chain**: `AlarmRingService.startRinging()` used to try exactly one
   ringtone URI and, if `MediaPlayer` failed to prepare it for any reason (a stale URI
   from an uninstalled ringtone-providing app, a moved/deleted file, a revoked

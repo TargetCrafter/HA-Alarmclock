@@ -43,30 +43,64 @@ class AlarmRingService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+
+        // FIRST, synchronously, before anything that can block. The OS gives a service five
+        // seconds from the startForegroundService() call that got us here to reach
+        // startForeground(), and kills the app instead if it doesn't. This used to run inside the
+        // coroutine below, *after* loading the alarm out of Room — fine when the app had been open
+        // recently and everything was warm, but that read comes off cold storage when the alarm is
+        // what woke a process Android killed hours earlier, which is exactly the "set it at
+        // bedtime, no sound in the morning" case. Posting the notification here also gets its
+        // full-screen intent in front of the user sooner. currentAlarm is null on a fresh start
+        // and set for a snooze/dismiss arriving mid-ring, so this reposts the same notification
+        // rather than flickering a placeholder over it.
+        startForeground(NOTIFICATION_ID, buildNotification(currentAlarm))
+
         when (intent?.action) {
-            ACTION_START -> handleStart(intent.getLongExtra(EXTRA_ALARM_ID, -1L))
+            ACTION_START -> handleStart(
+                intent.getLongExtra(EXTRA_ALARM_ID, -1L),
+                intent.getBooleanExtra(EXTRA_IS_SNOOZE, false),
+            )
             ACTION_SNOOZE -> handleSnooze()
             ACTION_DISMISS -> handleDismiss()
+            // Nothing to do, but we're a foreground service now and mustn't just sit there.
+            else -> stopRingingAndFinish()
         }
         return START_NOT_STICKY
     }
 
-    private fun handleStart(alarmId: Long) {
-        if (alarmId < 0) return
+    private fun handleStart(alarmId: Long, isSnooze: Boolean) {
+        if (alarmId < 0) {
+            Log.w(TAG, "handleStart: missing alarm id, nothing to ring")
+            stopRingingAndFinish()
+            return
+        }
         ringJob?.cancel()
         ringJob = lifecycleScope.launch {
             stopRinging()
-            val alarm = HaAlarmClockApp.from(this@AlarmRingService).repository.getById(alarmId) ?: return@launch
+            val alarm = HaAlarmClockApp.from(this@AlarmRingService).repository.getById(alarmId)
+            if (alarm == null) {
+                Log.w(TAG, "handleStart: alarm $alarmId no longer exists, not ringing")
+                stopRingingAndFinish()
+                return@launch
+            }
+            // A disabled alarm still rings for a snooze trigger: the snooze was armed while it was
+            // enabled, and turning the alarm off afterwards shouldn't strand a snooze already due.
+            if (!isSnooze && !alarm.enabled) {
+                Log.w(TAG, "handleStart: alarm $alarmId is disabled, not ringing")
+                stopRingingAndFinish()
+                return@launch
+            }
             currentAlarm = alarm
             RingingState.setRinging(alarm)
-            // The notification's fullScreenIntent (below) is the primary, OS-sanctioned way to
-            // bring up RingingActivity over the lock screen — a plain startActivity() from a
-            // background Service is otherwise subject to Android 10+'s background-activity-launch
-            // restrictions and isn't reliably honored. But Android 14+ can itself refuse to honor
-            // fullScreenIntent (see launchRingingActivityIfFullScreenIntentUnusable below), so that
-            // path attempts the direct launch as a fallback specifically when the OS has told us
-            // fullScreenIntent won't work.
-            startForeground(NOTIFICATION_ID, buildNotification(alarm))
+            // Replace the placeholder from onStartCommand now that we know which alarm this is.
+            // The notification's fullScreenIntent is the primary, OS-sanctioned way to bring up
+            // RingingActivity over the lock screen — a plain startActivity() from a background
+            // service is subject to Android 10+'s background-activity-launch restrictions and
+            // isn't reliably honored. But Android 14+ can itself refuse to honor fullScreenIntent
+            // (see launchRingingActivityIfFullScreenIntentUnusable), so that path attempts the
+            // direct launch as a fallback when the OS has told us it won't work.
+            NotificationManagerCompat.from(this@AlarmRingService).notify(NOTIFICATION_ID, buildNotification(alarm))
             launchRingingActivityIfFullScreenIntentUnusable()
             startRinging(alarm)
             delay(MAX_RING_DURATION_MILLIS)
@@ -75,7 +109,11 @@ class AlarmRingService : LifecycleService() {
     }
 
     private fun handleSnooze() {
-        val alarm = currentAlarm ?: return
+        val alarm = currentAlarm ?: run {
+            // Nothing is ringing, so there's nothing to snooze — but this service is foreground now.
+            stopRingingAndFinish()
+            return
+        }
         val app = HaAlarmClockApp.from(this)
         val snoozeMinutes = alarm.effectiveSnoozeMinutes(app.appDefaultsStore.defaults.value)
         val snoozeUntil = System.currentTimeMillis() + snoozeMinutes * 60_000L
@@ -211,17 +249,20 @@ class AlarmRingService : LifecycleService() {
         vibrator?.cancel()
     }
 
-    private fun buildNotification(alarm: Alarm): Notification {
+    /** [alarm] is null for the placeholder posted before the alarm has been loaded — see
+     * [onStartCommand]. It carries the same channel, category and full-screen intent, so the
+     * ringing screen still comes up from it; only the title and time fill in afterwards. */
+    private fun buildNotification(alarm: Alarm?): Notification {
         val fullScreenIntent = PendingIntent.getActivity(
             this,
-            alarm.id.toInt(),
+            alarm?.id?.toInt() ?: 0,
             Intent(this, RingingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val label = alarm.label.ifBlank { getString(R.string.app_name) }
+        val label = alarm?.label?.ifBlank { getString(R.string.app_name) } ?: getString(R.string.app_name)
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ALARM)
             .setContentTitle(label)
-            .setContentText(String.format("%02d:%02d", alarm.hour, alarm.minute))
+            .setContentText(alarm?.let { String.format("%02d:%02d", it.hour, it.minute) }.orEmpty())
             .setSmallIcon(R.drawable.ic_notification)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
