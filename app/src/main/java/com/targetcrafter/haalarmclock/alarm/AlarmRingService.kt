@@ -4,10 +4,7 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
 import android.media.MediaPlayer
-import android.media.RingtoneManager
-import android.net.Uri
 import android.os.Build
 import android.os.CombinedVibration
 import android.os.VibrationEffect
@@ -109,32 +106,23 @@ class AlarmRingService : LifecycleService() {
         stopSelf()
     }
 
-    /** Candidate ringtone URIs to try in order: the alarm's own choice first, falling back to the
-     * device default alarm sound, and finally *any* valid ringtone — so a stale/revoked URI (e.g.
-     * a ringtone from an app since uninstalled, or a file that moved) doesn't leave the alarm
-     * silent. Deduplicated since the first candidate is often already the default. */
-    private fun candidateRingtoneUris(alarm: Alarm): List<Uri> {
-        val candidates = listOfNotNull(
-            alarm.ringtoneUri?.let(Uri::parse),
-            RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM),
-            RingtoneManager.getValidRingtoneUri(this),
-        )
-        return candidates.distinct()
-    }
-
     private fun startRinging(alarm: Alarm) {
-        val candidates = candidateRingtoneUris(alarm)
+        // Logged on every alarm: an alarm-stream volume of zero silences the alarm no matter how
+        // correctly everything else here runs, and it is invisible from inside the app otherwise.
+        val volume = alarmVolume(this)
+        if (volume.isSilent) {
+            Log.e(TAG, "startRinging: alarm ${alarm.id} is ringing but the device alarm volume is 0 — it will be inaudible")
+        } else {
+            Log.i(TAG, "startRinging: alarm ${alarm.id}, alarm volume ${volume.current}/${volume.max}")
+        }
+
+        val candidates = candidateRingtoneUris(this, alarm.ringtoneUri)
         if (candidates.isEmpty()) {
             Log.e(TAG, "startRinging: no ringtone URI available at all (not even a system default)")
         }
         for ((index, uri) in candidates.withIndex()) {
             val player = MediaPlayer()
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
-            )
+            player.setAudioAttributes(alarmAudioAttributes())
             player.isLooping = true
             try {
                 player.setDataSource(this, uri)

@@ -1,6 +1,7 @@
 package com.targetcrafter.haalarmclock.ui.settings
 
 import android.content.Intent
+import android.media.MediaPlayer
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.background
@@ -69,6 +70,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.targetcrafter.haalarmclock.HaAlarmClockApp
+import com.targetcrafter.haalarmclock.alarm.AlarmSoundTestResult
+import com.targetcrafter.haalarmclock.alarm.alarmVolume
+import com.targetcrafter.haalarmclock.alarm.startAlarmSoundTest
 import com.targetcrafter.haalarmclock.data.AppDefaults
 import com.targetcrafter.haalarmclock.data.ClockStyle
 import com.targetcrafter.haalarmclock.data.WidgetAppearance
@@ -319,28 +323,39 @@ private fun ReliabilitySection() {
 
     var batteryUnrestricted by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
     var fullScreenIntentAllowed by remember { mutableStateOf(canUseFullScreenIntent(context)) }
+    var volume by remember { mutableStateOf(alarmVolume(context)) }
 
-    // Both are only changeable via a system settings screen the user is sent to below, so re-check
-    // on every return to this screen rather than relying on any callback.
+    // None of these are changeable from in here — the first two need a system settings screen, and
+    // the volume is changed with the hardware keys — so re-check on every return to this screen
+    // rather than relying on a callback.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 batteryUnrestricted = isIgnoringBatteryOptimizations(context)
                 fullScreenIntentAllowed = canUseFullScreenIntent(context)
+                volume = alarmVolume(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    if (batteryUnrestricted && fullScreenIntentAllowed) return
-
     Text("Alarm reliability", style = MaterialTheme.typography.titleMedium)
-    Text(
-        "These are Android system settings, not part of this app — they can silently stop an " +
-            "alarm from ringing even when it's scheduled correctly, and only you can grant them.",
-        style = MaterialTheme.typography.bodyMedium,
-    )
+    if (!batteryUnrestricted || !fullScreenIntentAllowed || volume.isSilent) {
+        Text(
+            "These are Android system settings, not part of this app — they can silently stop an " +
+                "alarm from ringing even when it's scheduled correctly, and only you can change them.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    if (volume.isSilent) {
+        ReliabilityWarningRow(
+            title = "Alarm volume is at zero",
+            description = "Alarms play on Android's separate alarm volume, which is currently " +
+                "silent — so an alarm will run correctly and you still won't hear it. Raise it " +
+                "with the volume keys while the test below is playing.",
+        )
+    }
     if (!batteryUnrestricted) {
         ReliabilityWarningRow(
             title = "Battery optimization is restricting this app",
@@ -367,6 +382,68 @@ private fun ReliabilitySection() {
             },
         )
     }
+    AlarmSoundTestRow()
+}
+
+/**
+ * Plays the alarm sound on demand, through the same ringtone candidates and audio attributes a
+ * real alarm uses. An alarm that fails only at 07:00 is close to undebuggable — this turns
+ * "wait until tomorrow morning to find out" into a ten-second check.
+ */
+@Composable
+private fun AlarmSoundTestRow() {
+    val context = LocalContext.current
+    val playing = remember { mutableStateOf<MediaPlayer?>(null) }
+    val status = remember { mutableStateOf<String?>(null) }
+
+    // Never leave the sound playing if the screen goes away while it's running.
+    DisposableEffect(Unit) {
+        onDispose { releaseQuietly(playing.value) }
+    }
+
+    ListItem(
+        headlineContent = { Text("Test the alarm sound") },
+        supportingContent = {
+            Text(
+                status.value ?: "Plays through the same audio path a real alarm uses, so you can " +
+                    "check it's actually audible without waiting for one.",
+            )
+        },
+        trailingContent = {
+            TextButton(
+                onClick = {
+                    if (playing.value != null) {
+                        releaseQuietly(playing.value)
+                        playing.value = null
+                        status.value = null
+                    } else {
+                        when (val result = startAlarmSoundTest(context)) {
+                            is AlarmSoundTestResult.Playing -> {
+                                playing.value = result.player
+                                val volume = alarmVolume(context)
+                                status.value = if (volume.isSilent) {
+                                    "Playing — but the alarm volume is at zero, so there's nothing " +
+                                        "to hear. Turn it up with the volume keys now."
+                                } else {
+                                    "Playing at ${volume.percent}% alarm volume. If you can't hear " +
+                                        "this, you wouldn't hear an alarm either."
+                                }
+                            }
+                            is AlarmSoundTestResult.Failed -> status.value = result.reason
+                        }
+                    }
+                },
+            ) { Text(if (playing.value != null) "Stop" else "Play") }
+        },
+    )
+}
+
+/** stop() throws if the player was never started, and this runs from teardown paths where that
+ * isn't worth caring about — the release is what matters. */
+private fun releaseQuietly(player: MediaPlayer?) {
+    player ?: return
+    runCatching { player.stop() }
+    player.release()
 }
 
 /** [buttonLabel]/[onClick] are optional: some warnings (an http:// URL) are fixed by editing a

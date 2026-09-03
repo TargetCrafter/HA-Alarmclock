@@ -467,49 +467,34 @@ custom_components/ha_alarmclock/   Home Assistant custom integration (Python)
 
 ### Integration icon
 
-There are two places an icon for this integration gets looked up, and they are not the same:
+Since **Home Assistant 2026.3**, a custom integration ships its own brand images in a
+`brand/` folder inside the integration directory, and they take priority over the brands
+CDN. Nothing needs submitting anywhere: the files in
+`custom_components/ha_alarmclock/brand/` *are* the icon Home Assistant shows.
 
-- **HACS** checks the repository itself, at `custom_components/<domain>/brand/icon.png` —
-  which is why the files live there, and what satisfies its `brands` check.
-- **Home Assistant core** resolves integration icons from the
-  [home-assistant/brands](https://github.com/home-assistant/brands) repository by domain,
-  not from this repo at all. Until a PR lands there, Home Assistant shows a generic
-  placeholder no matter what this repository contains — that submission is the only thing
-  that makes the icon appear on the Integrations page.
+The [home-assistant/brands](https://github.com/home-assistant/brands) repository no longer
+accepts pull requests for custom integrations at all — its PR template says so outright,
+pointing at the [Brands Proxy API
+announcement](https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api). Brand
+images are now proxied through Home Assistant's own
+`/api/brands/integration/{domain}/{image}` endpoint, which is what makes serving them
+locally possible.
 
-Both are PNG with transparency, trimmed and padded to the required 1:1 square. They're
-derived from the Android launcher icon's foreground layer, with the interior knockouts
-filled white: the adaptive icon draws the tree/circuit lines as transparent holes that let
-its white background layer through, and without that layer they'd be see-through and vanish
-against Home Assistant's dark theme. No `logo.png` is provided — logos are wordmarks, and
-this project doesn't have one; HA falls back to the icon.
+Recognised filenames are `icon.png`, `logo.png`, their `@2x` variants, and `dark_`
+prefixed versions of each. This ships `icon.png` (256×256) and `icon@2x.png` (512×512).
+No `logo.png`: logos are wordmarks and this project doesn't have one, so Home Assistant
+falls back to the icon. No `dark_icon.png` either — the icon is designed to read on both
+light and dark backgrounds, which is what the white fill below is for.
 
-#### Submitting the icon to home-assistant/brands
+Both files are PNG with transparency, trimmed and padded to a 1:1 square. They're derived
+from the Android launcher icon's foreground layer, with the interior knockouts filled
+white: the adaptive icon draws the tree/circuit lines as transparent holes that let its
+white background layer through, and without that layer they'd be see-through and vanish
+against Home Assistant's dark theme.
 
-The files already match everything that repository requires (`icon.png` at 256×256,
-`icon@2x.png` at 512×512, PNG, transparent, trimmed, and not using Home Assistant's own
-branding — which custom integrations aren't allowed to do). Submitting them is a copy,
-run from the directory holding this checkout:
-
-```bash
-gh repo fork home-assistant/brands --clone --remote
-cd brands
-git checkout -b ha-alarmclock-icon
-
-mkdir -p custom_integrations/ha_alarmclock
-cp ../HA-Alarmclock/custom_components/ha_alarmclock/brand/icon.png custom_integrations/ha_alarmclock/
-cp "../HA-Alarmclock/custom_components/ha_alarmclock/brand/icon@2x.png" custom_integrations/ha_alarmclock/
-
-git add custom_integrations/ha_alarmclock
-git commit -m "Add HA Alarm Clock custom integration icon"
-git push -u origin ha-alarmclock-icon
-gh pr create --repo home-assistant/brands \
-  --title "Add HA Alarm Clock custom integration icon" \
-  --body "Adds the icon for the ha_alarmclock custom integration (https://github.com/TargetCrafter/HA-Alarmclock)."
-```
-
-Brands does not permit symlinks for custom integrations, so these are real copies — if the
-app's launcher icon ever changes, regenerate the files here and open a fresh PR there.
+If the icon still shows as a placeholder, check the Home Assistant version is 2026.3 or
+newer, then restart Home Assistant and hard-refresh the browser — the proxy caches brand
+images on disk.
 
 ## Building the Android app
 
@@ -584,6 +569,19 @@ happen) diagnosable:
   than silently returning) when a fired alarm's ID no longer exists in the database or
   the alarm is disabled; `AlarmRingService` logs each ringtone candidate's failure and
   whether every candidate failed.
+- **The alarm-stream volume is checked and surfaced.** Alarms play on Android's
+  `STREAM_ALARM`, whose volume is separate from ringtone and media — it can sit at zero
+  while the phone is otherwise perfectly loud, and then every alarm runs correctly and is
+  still inaudible. Nothing in Android warns about this. `AlarmRingService` now logs the
+  alarm volume on every ring (at error level when it's zero), and Settings shows a warning
+  while it's zero.
+- **"Test the alarm sound" in Settings** plays the sound on demand through the same
+  ringtone candidates and `AudioAttributes` a real alarm uses (`alarm/AlarmAudio.kt`, shared
+  by both so the test can't pass while the real thing stays silent), and reports the alarm
+  volume it's playing at. A bug that only appears at 07:00 is close to undebuggable; this
+  makes it a ten-second check. It deliberately does *not* set `RingingState` or start the
+  ringing service, so testing can't push "an alarm is ringing" to Home Assistant and set off
+  whatever you've automated against it.
 
 None of this can fully rule out OEM-specific background-kill behavior the OS doesn't
 expose any API to detect or work around — the battery optimization exemption above is
