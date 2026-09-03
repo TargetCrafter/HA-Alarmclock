@@ -22,29 +22,30 @@ class AlarmReceiver : BroadcastReceiver() {
         }
 
         val isSnooze = intent.getBooleanExtra(EXTRA_IS_SNOOZE, false)
+
+        // Start the ringing service before touching the database — the ordering matters, and used
+        // to be the other way around. Everything below is a disk read, and when this alarm is the
+        // thing that woke a process Android killed hours ago (the app hasn't been opened since
+        // bedtime), those reads come off cold storage while the device is still spinning up out of
+        // Doze. Loading the alarm first pushed the service start behind all of it, and the service
+        // then has only five seconds from that call to reach startForeground() before the OS kills
+        // the app instead of ringing. Starting first also raises this process's priority for the
+        // rest of the work here. Whether the alarm still exists and is enabled is now checked
+        // inside the service, which has to load it anyway.
+        ContextCompat.startForegroundService(
+            context,
+            Intent(context, AlarmRingService::class.java)
+                .setAction(AlarmRingService.ACTION_START)
+                .putExtra(EXTRA_ALARM_ID, alarmId)
+                .putExtra(EXTRA_IS_SNOOZE, isSnooze),
+        )
+
         val app = HaAlarmClockApp.from(context)
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val alarm = app.repository.getById(alarmId)
-                if (alarm == null) {
-                    Log.w(TAG, "onReceive: alarm $alarmId no longer exists in the DB, not ringing (isSnooze=$isSnooze)")
-                    return@launch
-                }
-                if (!isSnooze && !alarm.enabled) {
-                    Log.w(TAG, "onReceive: alarm $alarmId fired but is disabled, not ringing")
-                    return@launch
-                }
-
                 app.repository.clearSnoozed(alarmId)
                 app.scheduler.cancelUpcomingNotification(alarmId)
-
-                ContextCompat.startForegroundService(
-                    context,
-                    Intent(context, AlarmRingService::class.java)
-                        .setAction(AlarmRingService.ACTION_START)
-                        .putExtra(EXTRA_ALARM_ID, alarmId),
-                )
                 if (!isSnooze) {
                     app.repository.disableAfterOneOffFired(alarmId)
                 }
