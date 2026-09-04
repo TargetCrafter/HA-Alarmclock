@@ -86,6 +86,9 @@ import com.targetcrafter.haalarmclock.ui.appViewModelFactory
 import com.targetcrafter.haalarmclock.util.canUseFullScreenIntent
 import com.targetcrafter.haalarmclock.util.isIgnoringBatteryOptimizations
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private val PRESET_COLORS = listOf(
     0xFF1B1B1B.toInt(), // near-black (default widget background)
@@ -387,7 +390,36 @@ private fun ReliabilitySection() {
         )
     }
     ScheduleHealthRow()
+    ScheduleDropHistoryRow()
     AlarmSoundTestRow()
+}
+
+/**
+ * Shows how often Android has been caught having dropped the alarm schedule. Without this the
+ * self-repair on app start would hide its own reason for existing: the schedule is put back before
+ * anyone can see it was gone, so every morning-after inspection looks healthy no matter what
+ * happened overnight.
+ */
+@Composable
+private fun ScheduleDropHistoryRow() {
+    val context = LocalContext.current
+    val app = HaAlarmClockApp.from(context)
+    val audit by app.alarmScheduleAudit.state.collectAsState()
+
+    if (!audit.hasDrops) return
+
+    val formatter = remember { DateTimeFormatter.ofPattern("d MMM, HH:mm") }
+    val lastDrop = remember(audit.lastDropAtMillis) {
+        Instant.ofEpochMilli(audit.lastDropAtMillis).atZone(ZoneId.systemDefault()).format(formatter)
+    }
+    ReliabilityWarningRow(
+        title = "Android has dropped your alarms ${audit.dropCount}×",
+        description = "Most recently on $lastDrop, found and re-armed when the app next started. " +
+            "This is the system force-stopping the app, not the alarm failing to ring — no code " +
+            "in here can prevent it, so it has to be fixed in the phone's battery settings.",
+        buttonLabel = "Reset",
+        onClick = { app.alarmScheduleAudit.clear() },
+    )
 }
 
 /**
