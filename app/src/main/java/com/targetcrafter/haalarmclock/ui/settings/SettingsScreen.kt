@@ -83,9 +83,13 @@ import com.targetcrafter.haalarmclock.ha.HaConnectionState
 import com.targetcrafter.haalarmclock.ha.HaSettings
 import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.appViewModelFactory
+import com.targetcrafter.haalarmclock.util.backgroundPolicy
 import com.targetcrafter.haalarmclock.util.canUseFullScreenIntent
 import com.targetcrafter.haalarmclock.util.isIgnoringBatteryOptimizations
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private val PRESET_COLORS = listOf(
     0xFF1B1B1B.toInt(), // near-black (default widget background)
@@ -328,6 +332,7 @@ private fun ReliabilitySection() {
     var batteryUnrestricted by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
     var fullScreenIntentAllowed by remember { mutableStateOf(canUseFullScreenIntent(context)) }
     var volume by remember { mutableStateOf(alarmVolume(context)) }
+    var policy by remember { mutableStateOf(backgroundPolicy(context)) }
 
     // None of these are changeable from in here — the first two need a system settings screen, and
     // the volume is changed with the hardware keys — so re-check on every return to this screen
@@ -338,6 +343,7 @@ private fun ReliabilitySection() {
                 batteryUnrestricted = isIgnoringBatteryOptimizations(context)
                 fullScreenIntentAllowed = canUseFullScreenIntent(context)
                 volume = alarmVolume(context)
+                policy = backgroundPolicy(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -358,6 +364,34 @@ private fun ReliabilitySection() {
             description = "Alarms play on Android's separate alarm volume, which is currently " +
                 "silent — so an alarm will run correctly and you still won't hear it. Raise it " +
                 "with the volume keys while the test below is playing.",
+        )
+    }
+    if (policy.threatensAlarms) {
+        // Asked of Android directly rather than inferred from a missed alarm: in this state the
+        // system force-stops the app when it decides it's idle, which silently drops every alarm
+        // it had scheduled. There's no intent that toggles this, so this opens the app's own
+        // settings page, where "Battery" / "Background restriction" lives.
+        ReliabilityWarningRow(
+            title = "Android is restricting this app in the background",
+            description = buildString {
+                if (policy.isRestricted) append("This app is in Restricted background mode. ")
+                policy.standbyBucket?.let { append("Android has it in the \"${it.label}\" standby bucket. ") }
+                append(
+                    "In this state the system force-stops the app when it thinks it's idle, and " +
+                        "force-stopping cancels every alarm it had scheduled — the alarm then " +
+                        "never rings, because it no longer exists. Open the app's settings and " +
+                        "allow unrestricted background use and battery usage.",
+                )
+            },
+            buttonLabel = "Open",
+            onClick = {
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:${context.packageName}"),
+                    ),
+                )
+            },
         )
     }
     if (!batteryUnrestricted) {
@@ -387,7 +421,36 @@ private fun ReliabilitySection() {
         )
     }
     ScheduleHealthRow()
+    ScheduleDropHistoryRow()
     AlarmSoundTestRow()
+}
+
+/**
+ * Shows how often Android has been caught having dropped the alarm schedule. Without this the
+ * self-repair on app start would hide its own reason for existing: the schedule is put back before
+ * anyone can see it was gone, so every morning-after inspection looks healthy no matter what
+ * happened overnight.
+ */
+@Composable
+private fun ScheduleDropHistoryRow() {
+    val context = LocalContext.current
+    val app = HaAlarmClockApp.from(context)
+    val audit by app.alarmScheduleAudit.state.collectAsState()
+
+    if (!audit.hasDrops) return
+
+    val formatter = remember { DateTimeFormatter.ofPattern("d MMM, HH:mm") }
+    val lastDrop = remember(audit.lastDropAtMillis) {
+        Instant.ofEpochMilli(audit.lastDropAtMillis).atZone(ZoneId.systemDefault()).format(formatter)
+    }
+    ReliabilityWarningRow(
+        title = "Android has dropped your alarms ${audit.dropCount}×",
+        description = "Most recently on $lastDrop, found and re-armed when the app next started. " +
+            "This is the system force-stopping the app, not the alarm failing to ring — no code " +
+            "in here can prevent it, so it has to be fixed in the phone's battery settings.",
+        buttonLabel = "Reset",
+        onClick = { app.alarmScheduleAudit.clear() },
+    )
 }
 
 /**

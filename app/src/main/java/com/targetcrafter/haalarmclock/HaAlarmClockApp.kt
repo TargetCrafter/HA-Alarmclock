@@ -7,8 +7,12 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.provider.Settings as AndroidSettings
+import android.util.Log
 import com.targetcrafter.haalarmclock.alarm.AlarmScheduler
+import com.targetcrafter.haalarmclock.alarm.ScheduleHealth
+import com.targetcrafter.haalarmclock.alarm.checkScheduleHealth
 import com.targetcrafter.haalarmclock.data.AlarmRepository
+import com.targetcrafter.haalarmclock.data.AlarmScheduleAudit
 import com.targetcrafter.haalarmclock.data.AppDatabase
 import com.targetcrafter.haalarmclock.data.AppDefaultsStore
 import com.targetcrafter.haalarmclock.data.ClockPreferencesStore
@@ -26,9 +30,12 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
+
+private const val TAG = "HaAlarmClockApp"
 
 const val NOTIFICATION_CHANNEL_ALARM = "alarm_ringing"
 const val NOTIFICATION_CHANNEL_SYNC = "ha_sync"
@@ -45,6 +52,7 @@ class HaAlarmClockApp : Application() {
     val widgetAppearanceStore: WidgetAppearanceStore by lazy { WidgetAppearanceStore(this) }
     val worldClockStore: WorldClockStore by lazy { WorldClockStore(this) }
     val tabPreferencesStore: TabPreferencesStore by lazy { TabPreferencesStore(this) }
+    val alarmScheduleAudit: AlarmScheduleAudit by lazy { AlarmScheduleAudit(this) }
 
     val timerScheduler: TimerScheduler by lazy { TimerScheduler(this) }
     private val timerNotifications: TimerNotifications by lazy { TimerNotifications(this) }
@@ -74,7 +82,7 @@ class HaAlarmClockApp : Application() {
     // (widget/HA sync upkeep) failing shouldn't be able to take the whole app down with it.
     private val applicationScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
-            android.util.Log.e("HaAlarmClockApp", "Unhandled exception in application-scope coroutine", throwable)
+            Log.e(TAG, "Unhandled exception in application-scope coroutine", throwable)
         },
     )
 
@@ -87,7 +95,17 @@ class HaAlarmClockApp : Application() {
         // this, the alarm list would go on showing an alarm as enabled while the OS held no record
         // of it, and the only symptom would be not waking up. Re-arming is idempotent: scheduling
         // the same alarm again just replaces its existing entry.
+        //
+        // Check *before* repairing. Re-arming fixes the schedule but also erases the evidence that
+        // it was ever dropped, and that evidence is the diagnosis: a dropped schedule means the OS
+        // killed the app, while an alarm that stayed registered and still didn't ring is a bug in
+        // here. Repairing first would make those two look identical by morning.
         applicationScope.launch {
+            val health = checkScheduleHealth(this@HaAlarmClockApp, repository.alarms.first())
+            if (health is ScheduleHealth.Missing) {
+                Log.e(TAG, "Android had dropped the alarm schedule (expected ${health.expectedAtMillis}); re-arming")
+            }
+            alarmScheduleAudit.recordStartupCheck(scheduleWasDropped = health is ScheduleHealth.Missing)
             repository.rescheduleAll()
             timerRepository.rescheduleAll()
         }
