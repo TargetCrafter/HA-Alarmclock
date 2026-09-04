@@ -48,10 +48,13 @@ class AlarmRepository(
         save(alarm.copy(enabled = enabled))
     }
 
-    /** Updates just the time, leaving every other setting untouched — used by the quick time-edit popup. */
+    /** Updates just the time, leaving every other setting untouched — used by the quick time-edit
+     * popup — and switches the alarm on. Setting a time is how you set an alarm: picking one on a
+     * switched-off alarm and having it stay off means it silently won't ring, which is never what
+     * was meant. Matches the stock Clock app. */
     suspend fun updateTime(id: Long, hour: Int, minute: Int) {
         val alarm = dao.getById(id) ?: return
-        save(alarm.copy(hour = hour, minute = minute))
+        save(alarm.copy(hour = hour, minute = minute, enabled = true))
     }
 
     /** Re-arms every enabled alarm's AlarmManager entry; alarms don't survive a reboot on their own.
