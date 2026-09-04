@@ -43,12 +43,17 @@ class AlarmEditorViewModel(
     private val _state = MutableStateFlow(AlarmEditorUiState(isNew = alarmId == null))
     val state: StateFlow<AlarmEditorUiState> = _state.asStateFlow()
 
+    /** The time an existing alarm had when the sheet opened, so [save] can tell whether the user
+     * actually changed it. Null for a new alarm, which starts switched on anyway. */
+    private var loadedTime: Pair<Int, Int>? = null
+
     init {
         val defaults = appDefaultsStore.defaults.value
         val id = alarmId
         if (id != null) {
             viewModelScope.launch {
                 val alarm = repository.getById(id)
+                loadedTime = alarm?.let { it.hour to it.minute }
                 _state.value = if (alarm != null) {
                     AlarmEditorUiState(
                         id = alarm.id,
@@ -107,6 +112,12 @@ class AlarmEditorViewModel(
 
     fun save(onDone: () -> Unit) {
         val s = _state.value
+        // Changing the time switches the alarm on, the same as the quick time popup does: picking
+        // a new time for a switched-off alarm and leaving it off means it silently won't ring.
+        // Only when the time actually changed, though — this sheet has no on/off switch of its own
+        // (that lives on the list row), so saving it after only renaming a switched-off alarm must
+        // not quietly turn it on.
+        val timeChanged = loadedTime?.let { (hour, minute) -> hour != s.hour || minute != s.minute } ?: false
         viewModelScope.launch {
             repository.save(
                 Alarm(
@@ -114,7 +125,7 @@ class AlarmEditorViewModel(
                     hour = s.hour,
                     minute = s.minute,
                     label = s.label,
-                    enabled = s.enabled,
+                    enabled = s.enabled || timeChanged,
                     repeatDaysMask = s.repeatDaysMask,
                     vibrate = s.vibrate,
                     fadeInEnabled = s.fadeInEnabled,

@@ -297,6 +297,12 @@ aren't obvious from using it.
   about, unlike a timer, so there's nothing worth a permanent notification for; it keeps
   running across tab swipes and a trip to Settings and back (both stay under the same
   `TabsScreen` back-stack entry) but not past the app process being killed.
+- **Changing an alarm's time switches it on**, the way the stock Clock app does. Setting a
+  time is how you set an alarm, so picking one on a switched-off alarm and leaving it off
+  would just mean it silently doesn't ring. The quick time popup always enables; the full
+  editor sheet only does so when the time actually changed, since that sheet has no on/off
+  switch of its own (that lives on the list row) and merely renaming a switched-off alarm
+  shouldn't quietly turn it on.
 - **Editing is in-place, not a separate screen.** Tap an alarm's time for a quick
   time-only popup — which now also has a Delete action, so removing an alarm doesn't
   require opening the full editor either — or tap its label/repeat area for the full
