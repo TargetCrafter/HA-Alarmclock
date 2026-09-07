@@ -60,6 +60,7 @@ import com.targetcrafter.haalarmclock.R
 import com.targetcrafter.haalarmclock.ha.startHaSyncServiceIfConfigured
 import com.targetcrafter.haalarmclock.ui.alarmlist.AlarmListScreen
 import com.targetcrafter.haalarmclock.ui.clock.ClockScreen
+import com.targetcrafter.haalarmclock.ui.debug.DebugScreen
 import com.targetcrafter.haalarmclock.ui.settings.SettingsScreen
 import com.targetcrafter.haalarmclock.ui.stopwatch.StopwatchScreen
 import com.targetcrafter.haalarmclock.ui.theme.HaAlarmClockTheme
@@ -69,6 +70,7 @@ import kotlinx.coroutines.launch
 
 private const val ROUTE_TABS = "tabs"
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_DEBUG = "debug"
 
 /** Clock first, per the reordering the user asked for. [addLabelRes] is null for tabs with no
  * "add" concept (Stopwatch) — the shared FAB just doesn't render on those. */
@@ -114,7 +116,13 @@ class MainActivity : ComponentActivity() {
                         TabsScreen(onOpenSettings = { navController.navigate(ROUTE_SETTINGS) })
                     }
                     composable(ROUTE_SETTINGS) {
-                        SettingsScreen(onBack = { navController.popBackStack() })
+                        SettingsScreen(
+                            onBack = { navController.popBackStack() },
+                            onOpenDebug = { navController.navigate(ROUTE_DEBUG) },
+                        )
+                    }
+                    composable(ROUTE_DEBUG) {
+                        DebugScreen(onBack = { navController.popBackStack() })
                     }
                 }
 

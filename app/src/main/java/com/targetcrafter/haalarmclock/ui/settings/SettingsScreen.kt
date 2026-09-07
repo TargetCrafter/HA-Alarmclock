@@ -1,7 +1,5 @@
 package com.targetcrafter.haalarmclock.ui.settings
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Intent
 import android.media.MediaPlayer
 import android.net.Uri
@@ -69,7 +67,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.core.content.getSystemService
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -109,7 +106,7 @@ private val PRESET_COLORS = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onOpenDebug: () -> Unit) {
     val context = LocalContext.current
     val app = HaAlarmClockApp.from(context)
     val viewModel: SettingsViewModel = viewModel(
@@ -194,7 +191,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .padding(bottom = 72.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            ReliabilitySection()
+            ReliabilitySection(onOpenDebug = onOpenDebug)
 
             HorizontalDivider()
 
@@ -316,6 +313,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                 enabled = baseUrl.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Open Home Assistant profile") }
+
+            HorizontalDivider()
+
+            ListItem(
+                headlineContent = { Text("Debug") },
+                supportingContent = {
+                    Text("Crash reports and a diagnostics report to copy into a bug report.")
+                },
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenDebug),
+            )
         }
     }
 }
@@ -328,7 +335,7 @@ fun SettingsScreen(onBack: () -> Unit) {
  * their current status with a one-tap fix.
  */
 @Composable
-private fun ReliabilitySection() {
+private fun ReliabilitySection(onOpenDebug: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -425,48 +432,24 @@ private fun ReliabilitySection() {
     }
     ScheduleHealthRow()
     ScheduleDropHistoryRow()
-    LastCrashRow()
+    CrashesRow(onOpenDebug)
     AlarmSoundTestRow()
 }
 
-/**
- * Shows the last crash, if there was one. Sideloaded builds have no Play Console collecting these
- * and reading logcat needs a computer, so without this a background crash is invisible from the
- * phone — while still being able to get the app force-stopped, which cancels its alarms.
- */
+/** Points at the Debug screen when there are crashes to look at. The traces themselves live there,
+ * where there's room to read them — a stack trace squeezed into a list row is unreadable. */
 @Composable
-private fun LastCrashRow() {
-    val context = LocalContext.current
-    val app = HaAlarmClockApp.from(context)
-    val crash by app.crashRecorder.lastCrash.collectAsState()
-    var expanded by remember { mutableStateOf(false) }
-
-    val recorded = crash ?: return
-    val formatter = remember { DateTimeFormatter.ofPattern("d MMM, HH:mm:ss") }
-    val at = remember(recorded.atMillis) {
-        Instant.ofEpochMilli(recorded.atMillis).atZone(ZoneId.systemDefault()).format(formatter)
-    }
+private fun CrashesRow(onOpenDebug: () -> Unit) {
+    val app = HaAlarmClockApp.from(LocalContext.current)
+    val crashes by app.crashRecorder.crashes.collectAsState()
+    if (crashes.isEmpty()) return
 
     ReliabilityWarningRow(
-        title = "The app crashed on $at",
-        description = if (expanded) {
-            "On thread \"${recorded.threadName}\".\n\n${recorded.stackTrace}"
-        } else {
-            "Repeated crashes get an app force-stopped, which cancels its alarms. Tap to see the " +
-                "stack trace, then copy it into a bug report."
-        },
-        buttonLabel = if (expanded) "Copy" else "Show",
-        onClick = {
-            if (expanded) {
-                context.getSystemService<ClipboardManager>()?.setPrimaryClip(
-                    ClipData.newPlainText("HA Alarm Clock crash", recorded.stackTrace),
-                )
-                app.crashRecorder.clear()
-                expanded = false
-            } else {
-                expanded = true
-            }
-        },
+        title = if (crashes.size == 1) "The app crashed once" else "The app crashed ${crashes.size} times",
+        description = "Repeated crashes get an app force-stopped, and a force-stop cancels every " +
+            "alarm it had scheduled. The stack traces are in Debug.",
+        buttonLabel = "Debug",
+        onClick = onOpenDebug,
     )
 }
 

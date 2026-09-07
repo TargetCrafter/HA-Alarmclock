@@ -4,30 +4,37 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.io.PrintWriter
 import java.io.StringWriter
 
-/** The last crash the app recorded, or null if it hasn't crashed since this was last cleared. */
+/** One recorded crash. */
+@Serializable
 data class RecordedCrash(val atMillis: Long, val threadName: String, val stackTrace: String)
 
 /**
- * Keeps the stack trace of the last crash where the user can actually read it.
+ * Keeps the stack traces of recent crashes where the user can actually read them.
  *
- * This app is sideloaded, so there is no Play Console collecting crashes, and reading logcat needs
- * a computer and a cable — which means a background crash is completely invisible from the phone.
- * That matters more here than in most apps: repeated crashes get an app force-stopped, and a
- * force-stop cancels every alarm it had scheduled. A crash nobody can see is therefore a plausible
- * cause of an alarm that silently never rings, and "the app crashed" alone doesn't say where.
+ * This app is sideloaded, so there is no store console collecting crashes, and reading logcat needs
+ * a computer and a cable — which leaves a background crash invisible from the phone itself. That
+ * matters more here than in most apps: repeated crashes get an app force-stopped, and a force-stop
+ * cancels every alarm it had scheduled. A crash nobody can see is therefore a plausible cause of an
+ * alarm that silently never rings.
  *
- * The handler chains to whatever was installed before it, so the system still shows its dialog and
- * kills the process exactly as it would have.
+ * Keeps a list rather than only the newest, because the failure mode worth diagnosing is a *loop* —
+ * and the first crash in one is usually the informative one, while later entries are often
+ * knock-on damage. The handler chains to whatever was installed before it, so the system still
+ * shows its dialog and kills the process exactly as it would have.
  */
 class CrashRecorder(context: Context) {
 
     private val prefs = context.getSharedPreferences("crash_recorder", Context.MODE_PRIVATE)
 
-    private val _lastCrash = MutableStateFlow(read())
-    val lastCrash: StateFlow<RecordedCrash?> = _lastCrash.asStateFlow()
+    private val _crashes = MutableStateFlow(read())
+
+    /** Newest first. */
+    val crashes: StateFlow<List<RecordedCrash>> = _crashes.asStateFlow()
 
     fun install() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
@@ -40,33 +47,33 @@ class CrashRecorder(context: Context) {
 
     private fun record(thread: Thread, throwable: Throwable) {
         val trace = StringWriter().also { throwable.printStackTrace(PrintWriter(it)) }.toString()
+        val crash = RecordedCrash(
+            atMillis = System.currentTimeMillis(),
+            threadName = thread.name,
+            stackTrace = trace.take(MAX_TRACE_CHARS),
+        )
+        val updated = (listOf(crash) + _crashes.value).take(MAX_CRASHES)
         // commit(), not apply(): the process is about to be killed, and an async write would be
         // lost — which would leave exactly the invisible crash this exists to prevent.
-        prefs.edit()
-            .putLong(KEY_AT, System.currentTimeMillis())
-            .putString(KEY_THREAD, thread.name)
-            .putString(KEY_TRACE, trace.take(MAX_TRACE_CHARS))
-            .commit()
+        prefs.edit().putString(KEY_CRASHES, Json.encodeToString(updated)).commit()
+        _crashes.value = updated
     }
 
     fun clear() {
         prefs.edit().clear().apply()
-        _lastCrash.value = null
+        _crashes.value = emptyList()
     }
 
-    private fun read(): RecordedCrash? {
-        val at = prefs.getLong(KEY_AT, 0L)
-        val trace = prefs.getString(KEY_TRACE, null) ?: return null
-        if (at <= 0L) return null
-        return RecordedCrash(at, prefs.getString(KEY_THREAD, "?").orEmpty(), trace)
+    private fun read(): List<RecordedCrash> {
+        val stored = prefs.getString(KEY_CRASHES, null) ?: return emptyList()
+        // Never throw out of a constructor over unreadable debug data.
+        return runCatching { Json.decodeFromString<List<RecordedCrash>>(stored) }.getOrDefault(emptyList())
     }
 
     companion object {
-        /** Enough for the frames that matter; a full trace with dozens of "caused by" chains would
-         * be unreadable on a phone and is not worth the preference bloat. */
+        /** Enough to see a loop start without filling preferences with knock-on failures. */
+        private const val MAX_CRASHES = 10
         private const val MAX_TRACE_CHARS = 8_000
-        private const val KEY_AT = "crashed_at"
-        private const val KEY_THREAD = "thread"
-        private const val KEY_TRACE = "stack_trace"
+        private const val KEY_CRASHES = "crashes"
     }
 }
