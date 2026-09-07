@@ -38,13 +38,18 @@ object HaSyncPayload {
                     put("time", "%02d:%02d".format(alarm.hour, alarm.minute))
                     put("enabled", alarm.enabled)
                     put("repeat", daysMaskLabel(alarm.repeatDaysMask))
-                    if (alarm.enabled) put("next_trigger", isoInstant(alarm.nextTriggerAtMillis()))
+                    // hasValidTime guards nextTriggerAtMillis, which throws on an out-of-range row.
+                    // This runs inside the HA sync loop, so one bad row must not be able to take
+                    // the push — or the process — down with it.
+                    if (alarm.enabled && alarm.hasValidTime) {
+                        put("next_trigger", isoInstant(alarm.nextTriggerAtMillis()))
+                    }
                     alarm.snoozedUntilMillis?.let { put("snoozed_until", isoInstant(it)) }
                 }
             }
         }
 
-        val next = alarms.filter { it.enabled }.minByOrNull { it.nextTriggerAtMillis() }
+        val next = alarms.filter { it.enabled && it.hasValidTime }.minByOrNull { it.nextTriggerAtMillis() }
         putJsonObject("next_alarm") {
             if (next != null) {
                 put("alarm_id", next.id)

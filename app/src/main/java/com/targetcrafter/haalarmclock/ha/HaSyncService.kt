@@ -74,8 +74,17 @@ class HaSyncService : LifecycleService() {
             ) { settings, alarms, ringing, timers -> SyncInputs(settings, alarms, ringing, timers) }
                 .collect { inputs ->
                     if (inputs.settings.isConfigured) {
-                        val payload = HaSyncPayload.build(app.deviceId, app.deviceName, inputs.alarms, inputs.ringing, inputs.timers)
-                        app.haApiClient.pushSync(inputs.settings.baseUrl, inputs.settings.accessToken, payload)
+                        // Nothing about pushing state to Home Assistant is worth crashing over.
+                        // This scope has no exception handler, so anything thrown here would kill
+                        // the process — and since this re-runs on every state change and every
+                        // service start, it would do so repeatedly. Repeated crashes get the app
+                        // force-stopped, which cancels every alarm it had scheduled.
+                        try {
+                            val payload = HaSyncPayload.build(app.deviceId, app.deviceName, inputs.alarms, inputs.ringing, inputs.timers)
+                            app.haApiClient.pushSync(inputs.settings.baseUrl, inputs.settings.accessToken, payload)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to build or push the sync payload", e)
+                        }
                     }
                 }
         }

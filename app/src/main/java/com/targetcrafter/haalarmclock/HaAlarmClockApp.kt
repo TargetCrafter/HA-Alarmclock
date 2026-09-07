@@ -25,6 +25,7 @@ import com.targetcrafter.haalarmclock.ha.HaSettingsStore
 import com.targetcrafter.haalarmclock.ha.HaWebSocketClient
 import com.targetcrafter.haalarmclock.timer.TimerNotifications
 import com.targetcrafter.haalarmclock.timer.TimerScheduler
+import com.targetcrafter.haalarmclock.util.CrashRecorder
 import com.targetcrafter.haalarmclock.widget.ClockWidgetUpdater
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +54,7 @@ class HaAlarmClockApp : Application() {
     val worldClockStore: WorldClockStore by lazy { WorldClockStore(this) }
     val tabPreferencesStore: TabPreferencesStore by lazy { TabPreferencesStore(this) }
     val alarmScheduleAudit: AlarmScheduleAudit by lazy { AlarmScheduleAudit(this) }
+    val crashRecorder: CrashRecorder by lazy { CrashRecorder(this) }
 
     val timerScheduler: TimerScheduler by lazy { TimerScheduler(this) }
     private val timerNotifications: TimerNotifications by lazy { TimerNotifications(this) }
@@ -88,6 +90,9 @@ class HaAlarmClockApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // First, before anything that could itself crash — a crash during startup is precisely the
+        // kind this exists to catch, and it can only record what happens after it's installed.
+        crashRecorder.install()
         createNotificationChannels()
         // Re-arm everything on every process start, not just after a reboot (BootReceiver). An
         // AlarmManager entry is dropped when an app is force-stopped — which is exactly what OEM
