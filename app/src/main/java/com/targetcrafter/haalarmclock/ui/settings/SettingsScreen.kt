@@ -1,5 +1,7 @@
 package com.targetcrafter.haalarmclock.ui.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.media.MediaPlayer
 import android.net.Uri
@@ -67,6 +69,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.content.getSystemService
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -422,7 +425,49 @@ private fun ReliabilitySection() {
     }
     ScheduleHealthRow()
     ScheduleDropHistoryRow()
+    LastCrashRow()
     AlarmSoundTestRow()
+}
+
+/**
+ * Shows the last crash, if there was one. Sideloaded builds have no Play Console collecting these
+ * and reading logcat needs a computer, so without this a background crash is invisible from the
+ * phone — while still being able to get the app force-stopped, which cancels its alarms.
+ */
+@Composable
+private fun LastCrashRow() {
+    val context = LocalContext.current
+    val app = HaAlarmClockApp.from(context)
+    val crash by app.crashRecorder.lastCrash.collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+
+    val recorded = crash ?: return
+    val formatter = remember { DateTimeFormatter.ofPattern("d MMM, HH:mm:ss") }
+    val at = remember(recorded.atMillis) {
+        Instant.ofEpochMilli(recorded.atMillis).atZone(ZoneId.systemDefault()).format(formatter)
+    }
+
+    ReliabilityWarningRow(
+        title = "The app crashed on $at",
+        description = if (expanded) {
+            "On thread \"${recorded.threadName}\".\n\n${recorded.stackTrace}"
+        } else {
+            "Repeated crashes get an app force-stopped, which cancels its alarms. Tap to see the " +
+                "stack trace, then copy it into a bug report."
+        },
+        buttonLabel = if (expanded) "Copy" else "Show",
+        onClick = {
+            if (expanded) {
+                context.getSystemService<ClipboardManager>()?.setPrimaryClip(
+                    ClipData.newPlainText("HA Alarm Clock crash", recorded.stackTrace),
+                )
+                app.crashRecorder.clear()
+                expanded = false
+            } else {
+                expanded = true
+            }
+        },
+    )
 }
 
 /**
